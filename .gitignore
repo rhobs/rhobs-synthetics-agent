@@ -8,7 +8,7 @@
 *.so
 *.dylib
 
-rhobs-synthetics-api
+rhobs-synthetics-agent
 
 # Test binary, built with `go test -c`
 *.test

@@ -1,5 +1,5 @@
 # Makefile for building the rhobs-synthetics-agent binary
-OAPI_CODEGEN_VERSION=v2.4.1
+
 # Replace 'your-quay-namespace' with your actual Quay.io namespace.
 IMAGE_URL ?= quay.io/app-sre/rhobs/rhobs-synthetics-agent
 # Image tag, defaults to 'latest'
@@ -11,11 +11,11 @@ KONFLUX_DIR := konflux
 # The name of the binary to be built
 BINARY_NAME=rhobs-synthetics-agent
 # The main package of the application
-MAIN_PACKAGE=./cmd/api/main.go
+MAIN_PACKAGE=./cmd/agent/main.go
 # podman vs. docker
 CONTAINER_ENGINE ?= podman
 
-.PHONY: all build clean run help lint lint-ci tidy generate ensure-oapi-codegen docker-build docker-push
+.PHONY: all build clean run help lint lint-ci tidy docker-build docker-push
 
 all: build
 

@@ -7,7 +7,7 @@
 .vscode
 
 # Ignore local build artifacts
-rhobs-synthetics-api
+rhobs-synthetics-agent
 *.exe
 *.out
 
