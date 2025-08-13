@@ -189,50 +189,36 @@ func TestWorker_fetchProbeList(t *testing.T) {
 	cfg := &Config{
 		PollingInterval: 30 * time.Second,
 		GracefulTimeout: 30 * time.Second,
+		APIBaseURL:      "",
 	}
 
 	worker := NewWorker(cfg)
-	resourceMgr := NewResourceManager()
 	ctx := context.Background()
 
-	// Test that fetchProbeList completes without error
-	// This is mainly testing that the method runs and simulates work
-	startTime := time.Now()
-	worker.fetchProbeList(ctx, resourceMgr)
-	elapsed := time.Since(startTime)
-
-	// Should take approximately 1 second (the simulated API call duration)
-	if elapsed < 900*time.Millisecond {
-		t.Errorf("fetchProbeList completed too quickly, elapsed: %v", elapsed)
-	}
-
-	if elapsed > 1500*time.Millisecond {
-		t.Errorf("fetchProbeList took too long, elapsed: %v", elapsed)
+	// Test that fetchProbeList fails gracefully without API client
+	_, err := worker.fetchProbeList(ctx)
+	if err == nil {
+		t.Error("Expected fetchProbeList to fail when API client is not configured")
 	}
 }
 
-func TestWorker_executeProbes(t *testing.T) {
+func TestWorker_fetchProbeList_WithAPI(t *testing.T) {
 	cfg := &Config{
 		PollingInterval: 30 * time.Second,
 		GracefulTimeout: 30 * time.Second,
+		APIBaseURL:      "http://example.com",
+		APITenant:       "test",
+		LabelSelector:   "test=true",
 	}
 
 	worker := NewWorker(cfg)
-	resourceMgr := NewResourceManager()
 	ctx := context.Background()
 
-	// Test that executeProbes completes without error
-	startTime := time.Now()
-	worker.executeProbes(ctx, resourceMgr)
-	elapsed := time.Since(startTime)
-
-	// Should take approximately 500ms (the simulated processing duration)
-	if elapsed < 400*time.Millisecond {
-		t.Errorf("executeProbes completed too quickly, elapsed: %v", elapsed)
-	}
-
-	if elapsed > 700*time.Millisecond {
-		t.Errorf("executeProbes took too long, elapsed: %v", elapsed)
+	// This will fail because the API endpoint doesn't exist
+	// but it tests that the method signature is correct
+	_, err := worker.fetchProbeList(ctx)
+	if err == nil {
+		t.Error("Expected fetchProbeList to fail when API endpoint doesn't exist")
 	}
 }
 
