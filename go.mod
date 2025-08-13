@@ -3,6 +3,7 @@ module github.com/rhobs/rhobs-synthetics-agent
 go 1.24.1
 
 require (
+	github.com/oklog/run v1.2.0
 	github.com/spf13/cobra v1.9.1
 	github.com/spf13/viper v1.20.1
 )

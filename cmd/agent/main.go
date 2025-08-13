@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"time"
 
+	"github.com/rhobs/rhobs-synthetics-agent/internal/agent"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -35,24 +37,34 @@ func main() {
 		Use:   "start",
 		Short: "Start the agent process",
 		Long:  "Starts the synthetic agent. This will run in a loop, polling the API for new probes and will then process them as needed.",
-		Run: func(cmd *cobra.Command, args []string) {
-			log.Printf("Starting synthetic agent")
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := agent.LoadConfig()
+			if err != nil {
+				return fmt.Errorf("failed to load config: %w", err)
+			}
+
+			agent := agent.New(cfg)
+			return agent.Run()
 		},
 	}
 
 	// General Config flags
 	startCmd.Flags().String("config", "", "Path to Viper config")
 	startCmd.Flags().String("log-level", "info", "Log verbosity: debug, info")
+	startCmd.Flags().Duration("interval", time.Second*30, "Polling interval")
+	startCmd.Flags().String("graceful-timeout", "30s", "Graceful shutdown timeout")
 
 	// Bind flags to viper
+	viper.BindPFlag("config", startCmd.Flags().Lookup("config"))
 	viper.BindPFlag("log_level", startCmd.Flags().Lookup("log-level"))
+	viper.BindPFlag("polling_interval", startCmd.Flags().Lookup("interval"))
+	viper.BindPFlag("graceful_timeout", startCmd.Flags().Lookup("graceful-timeout"))
 
 	// Add commands to the root command
 	rootCmd.AddCommand(startCmd)
 
 	// Execute the root command. This parses the arguments and calls the appropriate command's Run function.
 	if err := rootCmd.Execute(); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
+		log.Fatalf("Error: %v", err)
 	}
 }
