@@ -16,7 +16,7 @@ MAIN_PACKAGE=./cmd/agent/main.go
 CONTAINER_ENGINE ?= podman
 TESTOPTS ?= -cover
 
-.PHONY: all build clean run help lint lint-fix lint-ci go-mod-tidy go-mod-download test test-race test-integration coverage docker-build docker-push example-config
+.PHONY: all build clean run help lint lint-fix lint-ci go-mod-tidy go-mod-download test test-race test-integration test-e2e test-e2e-real test-e2e-all coverage docker-build docker-push example-config
 
 all: build
 
@@ -50,20 +50,32 @@ $(GOLANGCI_LINT_BIN):
 
 test: go-mod-download
 	@echo "Running unit tests..."
-	go test $(TESTOPTS) ./...
+	go test $(TESTOPTS) ./cmd/... ./internal/...
 
 test-race: go-mod-download
 	@echo "Running tests with race detection..."
-	go test -race $(TESTOPTS) ./...
+	go test -race $(TESTOPTS) ./cmd/... ./internal/...
 
 test-integration: go-mod-download
 	@echo "Running integration tests..."
 	go test -v ./internal/agent -run TestWorker_FullIntegration
 
+test-e2e: go-mod-download
+	@echo "Running end-to-end tests with mock API..."
+	go test -v ./test/e2e -run "TestAgent_E2E_WithAPI" -timeout 30s
+
+test-e2e-real: go-mod-download
+	@echo "Running end-to-end tests with real API..."
+	go test -v ./test/e2e -run "TestAgent_E2E_.*RealAPI" -timeout 60s
+
+test-e2e-all: go-mod-download
+	@echo "Running all end-to-end tests..."
+	go test -v ./test/e2e -timeout 60s
+
 .PHONY: coverage
 coverage:
 	@echo "Running tests with coverage report..."
-	@go test -coverprofile=coverage.out ./...
+	@go test -coverprofile=coverage.out ./cmd/... ./internal/...
 	@go tool cover -html=coverage.out -o coverage.html
 	@echo "Coverage report generated: coverage.html"
 	@go tool cover -func=coverage.out | grep "total:"
@@ -139,6 +151,9 @@ help:
 	@echo "  test             - Run unit tests with coverage"
 	@echo "  test-race        - Run tests with race detection"
 	@echo "  test-integration - Run integration tests"
+	@echo "  test-e2e         - Run end-to-end tests with mock API"
+	@echo "  test-e2e-real    - Run end-to-end tests with real API"
+	@echo "  test-e2e-all     - Run all end-to-end tests"
 	@echo "  coverage         - Generate detailed coverage report"
 	@echo ""
 	@echo "Code Quality:"

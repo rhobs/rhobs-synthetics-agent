@@ -124,9 +124,9 @@ func (w *Worker) processProbes(ctx context.Context, resourceMgr *ResourceManager
 			}
 		} else {
 			log.Printf("Successfully processed probe %s", probe.ID)
-			// Update probe status to created
-			if updateErr := w.apiClient.UpdateProbeStatus(probe.ID, "created"); updateErr != nil {
-				log.Printf("Failed to update probe %s status to created: %v", probe.ID, updateErr)
+			// Update probe status to active
+			if updateErr := w.apiClient.UpdateProbeStatus(probe.ID, "active"); updateErr != nil {
+				log.Printf("Failed to update probe %s status to active: %v", probe.ID, updateErr)
 			}
 		}
 	}
