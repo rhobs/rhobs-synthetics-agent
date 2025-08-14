@@ -62,7 +62,7 @@ The e2e tests verify:
 
 - Go 1.24.1 or later
 - All dependencies installed (`go mod download`)
-- For real API tests: RHOBS Synthetics API source code (configurable via `RHOBS_SYNTHETICS_API_PATH` environment variable, defaults to `../rhobs-synthetics-api`)
+- For real API tests: RHOBS Synthetics API source code (configurable via `RHOBS_SYNTHETICS_API_PATH` environment variable - **must be an absolute path**)
 
 ### Running E2E Tests
 
@@ -81,7 +81,12 @@ go test -v ./test/e2e -run TestAgent_E2E_WithAPI/VerifyProbesFetched
 
 #### Real API Tests (More Comprehensive)
 
+**Note:** These tests require `RHOBS_SYNTHETICS_API_PATH` to be set to an absolute path pointing to the RHOBS Synthetics API source code.
+
 ```bash
+# Set the API path (must be absolute)
+export RHOBS_SYNTHETICS_API_PATH="/absolute/path/to/rhobs-synthetics-api"
+
 # Run e2e tests with real RHOBS Synthetics API
 make test-e2e-real
 
@@ -94,7 +99,12 @@ go test -v ./test/e2e -run TestAgent_E2E_WithRealAPI
 
 #### All Tests
 
+**Note:** Running all tests requires `RHOBS_SYNTHETICS_API_PATH` to be set to an absolute path.
+
 ```bash
+# Set the API path (must be absolute)
+export RHOBS_SYNTHETICS_API_PATH="/absolute/path/to/rhobs-synthetics-api"
+
 # Run all e2e tests (mock + real API)
 make test-e2e-all
 
@@ -189,7 +199,7 @@ The real API server is started with:
 
 #### Requirements
 
-- RHOBS Synthetics API source code must be available (path configurable via `RHOBS_SYNTHETICS_API_PATH` environment variable, defaults to `../rhobs-synthetics-api`)
+- RHOBS Synthetics API source code must be available (path configurable via `RHOBS_SYNTHETICS_API_PATH` environment variable - **must be an absolute path**)
 - Go build environment configured
 - No conflicting processes on ports 8080-8099
 

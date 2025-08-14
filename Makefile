@@ -66,10 +66,18 @@ test-e2e: go-mod-download
 
 test-e2e-real: go-mod-download
 	@echo "Running end-to-end tests with real API..."
+	@if [ -z "$$RHOBS_SYNTHETICS_API_PATH" ]; then \
+		echo "Error: RHOBS_SYNTHETICS_API_PATH environment variable is not set"; \
+		exit 1; \
+	fi
 	go test -v ./test/e2e -run "TestAgent_E2E_.*RealAPI" -timeout 60s
 
 test-e2e-all: go-mod-download
 	@echo "Running all end-to-end tests..."
+	@if [ -z "$$RHOBS_SYNTHETICS_API_PATH" ]; then \
+		echo "Error: RHOBS_SYNTHETICS_API_PATH environment variable is not set"; \
+		exit 1; \
+	fi
 	go test -v ./test/e2e -timeout 60s
 
 .PHONY: coverage
