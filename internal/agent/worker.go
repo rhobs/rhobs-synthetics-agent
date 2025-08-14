@@ -2,19 +2,39 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"log"
 	"sync"
 	"time"
+
+	"github.com/rhobs/rhobs-synthetics-agent/internal/api"
+	"github.com/rhobs/rhobs-synthetics-agent/internal/k8s"
 )
 
 type Worker struct {
-	config *Config
+	config       *Config
+	apiClient    *api.Client
+	probeManager *k8s.ProbeManager
 }
 
 func NewWorker(cfg *Config) *Worker {
+	var apiClient *api.Client
+	var probeManager *k8s.ProbeManager
+	
+	if cfg != nil {
+		if cfg.APIBaseURL != "" {
+			apiClient = api.NewClient(cfg.APIBaseURL, cfg.APITenant, cfg.APIEndpoint, cfg.JWTToken)
+		}
+		probeManager = k8s.NewProbeManager(cfg.Namespace)
+	} else {
+		probeManager = k8s.NewProbeManager("default")
+	}
 
 	return &Worker{
-		config: cfg,
+		config:       cfg,
+		apiClient:    apiClient,
+		probeManager: probeManager,
 	}
 }
 
@@ -63,45 +83,105 @@ func (w *Worker) processProbes(ctx context.Context, resourceMgr *ResourceManager
 	default:
 	}
 
-	log.Println("Checking for probes to create")
+	log.Println("Starting probe reconciliation cycle")
 
 	// Add task to wait group for graceful shutdown tracking
 	taskWG.Add(1)
 	defer taskWG.Done()
 
-	// TODO: Add core logic here:
-	// 1. Call API to check for probes to create using api client
-	w.fetchProbeList(ctx, resourceMgr)
+	if w.apiClient == nil {
+		log.Println("API client not configured, skipping probe processing")
+		return nil
+	}
 
-	// 2. Process the probe creation
-	w.executeProbes(ctx, resourceMgr)
+	// Fetch probe configurations from the API
+	probes, err := w.fetchProbeList(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to fetch probe list: %w", err)
+	}
+
+	if len(probes) == 0 {
+		log.Println("No pending probes found")
+		return nil
+	}
+
+	log.Printf("Found %d probes to process", len(probes))
+
+	// Process each probe
+	for _, probe := range probes {
+		select {
+		case <-shutdownChan:
+			log.Println("shutdown in progress, stopping probe processing")
+			return nil
+		default:
+		}
+
+		if err := w.processProbe(ctx, probe); err != nil {
+			log.Printf("Failed to process probe %s: %v", probe.ID, err)
+			// Update probe status to failed
+			if updateErr := w.apiClient.UpdateProbeStatus(probe.ID, "failed"); updateErr != nil {
+				log.Printf("Failed to update probe %s status to failed: %v", probe.ID, updateErr)
+			}
+		} else {
+			log.Printf("Successfully processed probe %s", probe.ID)
+			// Update probe status to created
+			if updateErr := w.apiClient.UpdateProbeStatus(probe.ID, "created"); updateErr != nil {
+				log.Printf("Failed to update probe %s status to created: %v", probe.ID, updateErr)
+			}
+		}
+	}
 
 	return nil
 }
 
-// fetchProbeList simulates fetching probe lists from API
-func (w *Worker) fetchProbeList(ctx context.Context, resourceMgr *ResourceManager) {
-	log.Printf("Starting probe list fetch...")
+// fetchProbeList retrieves probe configurations from the RHOBS Probes API
+func (w *Worker) fetchProbeList(ctx context.Context) ([]api.Probe, error) {
+	if w.apiClient == nil {
+		return nil, fmt.Errorf("API client not configured")
+	}
 
-	// Simulate creating network connection for API call
-	// In real implementation, this would be an actual HTTP connection
-	// For demo purposes, we'll simulate it
-	log.Printf("Establishing connection to API...")
+	labelSelector := ""
+	if w.config != nil {
+		labelSelector = w.config.LabelSelector
+	}
 
-	// Simulate API call - allow to complete naturally
-	time.Sleep(1 * time.Second)
-	log.Printf("Successfully fetched probe list from API")
+	log.Printf("Fetching probe list from API with label selector: %s", labelSelector)
+
+	probes, err := w.apiClient.GetProbes(labelSelector)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get probes from API: %w", err)
+	}
+
+	log.Printf("Successfully fetched %d probes from API", len(probes))
+	return probes, nil
 }
 
-// executeProbes simulates processing the fetched probes
-func (w *Worker) executeProbes(ctx context.Context, resourceMgr *ResourceManager) {
-	log.Printf("Starting probe processing...")
+// processProbe creates a Custom Resource for a single probe
+func (w *Worker) processProbe(ctx context.Context, probe api.Probe) error {
+	log.Printf("Processing probe %s with target URL: %s", probe.ID, probe.StaticURL)
 
-	// Simulate opening temporary files for probe data
-	// In real implementation, these would be actual file handles
-	log.Printf("Creating temporary files for probe data...")
+	// Create probe configuration from the agent config
+	probeConfig := k8s.ProbeConfig{
+		Interval:  w.config.Blackbox.Interval,
+		Module:    w.config.Blackbox.Module,
+		ProberURL: w.config.Blackbox.ProberURL,
+	}
 
-	// Simulate probe processing - allow to complete naturally
-	time.Sleep(500 * time.Millisecond)
-	log.Printf("Processed probes successfully")
+	// Create the probe Custom Resource
+	cr, err := w.probeManager.CreateProbeResource(probe, probeConfig)
+	if err != nil {
+		return fmt.Errorf("failed to create probe resource: %w", err)
+	}
+
+	// In a real implementation, this would apply the CR to the Kubernetes cluster
+	// For now, we'll log the created resource
+	crJSON, err := json.MarshalIndent(cr, "", "  ")
+	if err != nil {
+		log.Printf("Failed to marshal CR to JSON: %v", err)
+	} else {
+		log.Printf("Created probe Custom Resource:\n%s", string(crJSON))
+	}
+
+	log.Printf("Successfully created probe.monitoring.rhobs resource for probe %s", probe.ID)
+	return nil
 }
