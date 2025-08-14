@@ -8,7 +8,7 @@ The RHOBS Synthetics Agent provides:
 - **API Integration**: Polls the RHOBS Probes API to retrieve probe configurations
 - **URL Validation**: Validates target URLs before creating monitoring resources  
 - **Custom Resource Management**: Creates `probe.monitoring.rhobs` CRs in Kubernetes
-- **Status Tracking**: Updates probe status (created/failed) via API calls
+- **Status Tracking**: Updates probe status (active/failed) via API calls
 - **Label-based Filtering**: Uses configurable label selectors to target specific probes
 
 ## Quick Start

@@ -88,16 +88,16 @@ func TestLoadConfig_EnvironmentVariables(t *testing.T) {
 	viper.Reset()
 
 	// Set environment variables
-	os.Setenv("LOG_LEVEL", "debug")
-	os.Setenv("LOG_FORMAT", "text")
-	os.Setenv("POLLING_INTERVAL", "60s")
-	os.Setenv("GRACEFUL_TIMEOUT", "45s")
+	_ = os.Setenv("LOG_LEVEL", "debug")
+	_ = os.Setenv("LOG_FORMAT", "text")
+	_ = os.Setenv("POLLING_INTERVAL", "60s")
+	_ = os.Setenv("GRACEFUL_TIMEOUT", "45s")
 
 	defer func() {
-		os.Unsetenv("LOG_LEVEL")
-		os.Unsetenv("LOG_FORMAT")
-		os.Unsetenv("POLLING_INTERVAL")
-		os.Unsetenv("GRACEFUL_TIMEOUT")
+		_ = os.Unsetenv("LOG_LEVEL")
+		_ = os.Unsetenv("LOG_FORMAT")
+		_ = os.Unsetenv("POLLING_INTERVAL")
+		_ = os.Unsetenv("GRACEFUL_TIMEOUT")
 	}()
 
 	cfg, err := LoadConfig()
@@ -131,7 +131,7 @@ func TestLoadConfig_ConfigFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}
-	defer os.Remove(tmpFile.Name())
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
 
 	configContent := `
 log_level: error
@@ -142,7 +142,7 @@ graceful_timeout: 60s
 	if _, err := tmpFile.WriteString(configContent); err != nil {
 		t.Fatalf("Failed to write to temp file: %v", err)
 	}
-	tmpFile.Close()
+	_ = tmpFile.Close()
 
 	// Set the config file path
 	viper.Set("config", tmpFile.Name())
@@ -191,7 +191,7 @@ func TestLoadConfig_InvalidDuration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}
-	defer os.Remove(tmpFile.Name())
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
 
 	configContent := `
 log_level: info
@@ -202,7 +202,7 @@ graceful_timeout: 30s
 	if _, err := tmpFile.WriteString(configContent); err != nil {
 		t.Fatalf("Failed to write to temp file: %v", err)
 	}
-	tmpFile.Close()
+	_ = tmpFile.Close()
 
 	// Set the config file path
 	viper.Set("config", tmpFile.Name())
@@ -222,8 +222,8 @@ func TestLoadConfig_EmptyConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}
-	defer os.Remove(tmpFile.Name())
-	tmpFile.Close()
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
+	_ = tmpFile.Close()
 
 	// Set the config file path
 	viper.Set("config", tmpFile.Name())
@@ -248,12 +248,12 @@ func TestLoadConfig_MixedSources(t *testing.T) {
 	viper.Reset()
 
 	// Set some environment variables
-	os.Setenv("LOG_LEVEL", "debug")
-	os.Setenv("POLLING_INTERVAL", "90s")
+	_ = os.Setenv("LOG_LEVEL", "debug")
+	_ = os.Setenv("POLLING_INTERVAL", "90s")
 
 	defer func() {
-		os.Unsetenv("LOG_LEVEL")
-		os.Unsetenv("POLLING_INTERVAL")
+		_ = os.Unsetenv("LOG_LEVEL")
+		_ = os.Unsetenv("POLLING_INTERVAL")
 	}()
 
 	// Create a config file with some values
@@ -261,7 +261,7 @@ func TestLoadConfig_MixedSources(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}
-	defer os.Remove(tmpFile.Name())
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
 
 	configContent := `
 log_format: custom
@@ -270,7 +270,7 @@ graceful_timeout: 120s
 	if _, err := tmpFile.WriteString(configContent); err != nil {
 		t.Fatalf("Failed to write to temp file: %v", err)
 	}
-	tmpFile.Close()
+	_ = tmpFile.Close()
 
 	// Set the config file path
 	viper.Set("config", tmpFile.Name())

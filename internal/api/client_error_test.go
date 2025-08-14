@@ -16,7 +16,7 @@ func TestClient_GetProbes_ErrorCases(t *testing.T) {
 			name: "API returns 404",
 			serverResponse: func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusNotFound)
-				w.Write([]byte("Not found"))
+				_, _ = w.Write([]byte("Not found"))
 			},
 			expectError: true,
 		},
@@ -24,7 +24,7 @@ func TestClient_GetProbes_ErrorCases(t *testing.T) {
 			name: "API returns 500",
 			serverResponse: func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusInternalServerError)
-				w.Write([]byte("Internal server error"))
+				_, _ = w.Write([]byte("Internal server error"))
 			},
 			expectError: true,
 		},
@@ -32,7 +32,7 @@ func TestClient_GetProbes_ErrorCases(t *testing.T) {
 			name: "API returns invalid JSON",
 			serverResponse: func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusOK)
-				w.Write([]byte("invalid json"))
+				_, _ = w.Write([]byte("invalid json"))
 			},
 			expectError: true,
 		},
@@ -40,7 +40,7 @@ func TestClient_GetProbes_ErrorCases(t *testing.T) {
 			name: "API returns empty response",
 			serverResponse: func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusOK)
-				w.Write([]byte("{}"))
+				_, _ = w.Write([]byte("{}"))
 			},
 			expectError: false,
 		},
@@ -73,7 +73,7 @@ func TestClient_UpdateProbeStatus_ErrorCases(t *testing.T) {
 			name: "API returns 404",
 			serverResponse: func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusNotFound)
-				w.Write([]byte("Probe not found"))
+				_, _ = w.Write([]byte("Probe not found"))
 			},
 			expectError: true,
 		},
@@ -81,7 +81,7 @@ func TestClient_UpdateProbeStatus_ErrorCases(t *testing.T) {
 			name: "API returns 500",
 			serverResponse: func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusInternalServerError)
-				w.Write([]byte("Internal server error"))
+				_, _ = w.Write([]byte("Internal server error"))
 			},
 			expectError: true,
 		},

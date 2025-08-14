@@ -112,11 +112,11 @@ func TestWorker_FullIntegration(t *testing.T) {
 				},
 			}
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(response)
+			_ = json.NewEncoder(w).Encode(response)
 		} else if r.Method == "PATCH" {
 			// Record status updates
 			var statusUpdate api.ProbeStatusUpdate
-			json.NewDecoder(r.Body).Decode(&statusUpdate)
+			_ = json.NewDecoder(r.Body).Decode(&statusUpdate)
 			updateCalls = append(updateCalls, statusUpdate.Status)
 			w.WriteHeader(http.StatusOK)
 		}
@@ -160,16 +160,16 @@ func TestWorker_FullIntegration(t *testing.T) {
 		t.Error("Expected at least one status update call")
 	}
 
-	// The status should be "created" for successful processing
+	// The status should be "active" for successful processing
 	found := false
 	for _, status := range updateCalls {
-		if status == "created" {
+		if status == "active" {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Error("Expected at least one 'created' status update")
+		t.Error("Expected at least one 'active' status update")
 	}
 }
 
@@ -184,7 +184,7 @@ func TestWorker_processProbes_WithValidConfig(t *testing.T) {
 	apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		response := api.ProbeListResponse{Probes: []api.Probe{}}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	}))
 	defer apiServer.Close()
 

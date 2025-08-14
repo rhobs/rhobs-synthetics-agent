@@ -55,10 +55,10 @@ func main() {
 	startCmd.Flags().String("graceful-timeout", "30s", "Graceful shutdown timeout")
 
 	// Bind flags to viper
-	viper.BindPFlag("config", startCmd.Flags().Lookup("config"))
-	viper.BindPFlag("log_level", startCmd.Flags().Lookup("log-level"))
-	viper.BindPFlag("polling_interval", startCmd.Flags().Lookup("interval"))
-	viper.BindPFlag("graceful_timeout", startCmd.Flags().Lookup("graceful-timeout"))
+	_ = viper.BindPFlag("config", startCmd.Flags().Lookup("config"))
+	_ = viper.BindPFlag("log_level", startCmd.Flags().Lookup("log-level"))
+	_ = viper.BindPFlag("polling_interval", startCmd.Flags().Lookup("interval"))
+	_ = viper.BindPFlag("graceful_timeout", startCmd.Flags().Lookup("graceful-timeout"))
 
 	// Add commands to the root command
 	rootCmd.AddCommand(startCmd)

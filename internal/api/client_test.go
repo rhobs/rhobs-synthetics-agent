@@ -50,7 +50,7 @@ func TestClient_GetProbes(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	}))
 	defer server.Close()
 
@@ -95,8 +95,8 @@ func TestClient_UpdateProbeStatus(t *testing.T) {
 			return
 		}
 
-		if statusUpdate.Status != "created" {
-			t.Errorf("Expected status 'created', got %s", statusUpdate.Status)
+		if statusUpdate.Status != "active" {
+			t.Errorf("Expected status 'active', got %s", statusUpdate.Status)
 		}
 
 		w.WriteHeader(http.StatusOK)
@@ -104,7 +104,7 @@ func TestClient_UpdateProbeStatus(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "test-tenant", "/api/metrics/v1", "")
-	err := client.UpdateProbeStatus("probe-1", "created")
+	err := client.UpdateProbeStatus("probe-1", "active")
 
 	if err != nil {
 		t.Fatalf("UpdateProbeStatus() failed: %v", err)

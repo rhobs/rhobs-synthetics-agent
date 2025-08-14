@@ -83,6 +83,7 @@ type Agent struct {
 	resourceManager *ResourceManager
 	taskWG          sync.WaitGroup
 	shutdownChan    chan struct{}
+	shutdownOnce    sync.Once
 }
 
 func New(cfg *Config) *Agent {
@@ -106,15 +107,18 @@ func (a *Agent) Run() error {
 	// Signal handling
 	{
 		sig := make(chan os.Signal, 1)
-		shutdownOnce := sync.Once{}
 		g.Add(func() error {
 			signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
-			receivedSig := <-sig
-			log.Printf("Received signal %v, initiating graceful shutdown...", receivedSig)
-
-			shutdownOnce.Do(func() {
-				close(a.shutdownChan)
-			})
+			
+			select {
+			case receivedSig := <-sig:
+				log.Printf("Received signal %v, initiating graceful shutdown...", receivedSig)
+				a.shutdownOnce.Do(func() {
+					close(a.shutdownChan)
+				})
+			case <-a.shutdownChan:
+				// Shutdown already initiated programmatically
+			}
 
 			// Wait for active tasks to complete with timeout
 			log.Printf("Waiting for active tasks to complete (timeout: %v)...", a.config.GracefulTimeout)
@@ -168,6 +172,14 @@ func (a *Agent) Run() error {
 
 	log.Println("RHOBS Synthetic Agent shutdown complete")
 	return nil
+}
+
+// Shutdown gracefully shuts down the agent (useful for testing)
+func (a *Agent) Shutdown() {
+	a.shutdownOnce.Do(func() {
+		log.Printf("Programmatic shutdown initiated")
+		close(a.shutdownChan)
+	})
 }
 
 func (a *Agent) startHealthServer(ctx context.Context) error {
