@@ -62,7 +62,7 @@ The e2e tests verify:
 
 - Go 1.24.1 or later
 - All dependencies installed (`go mod download`)
-- For real API tests: RHOBS Synthetics API source code (configurable via `RHOBS_SYNTHETICS_API_PATH` environment variable, defaults to `/Users/drow/src/rhobs-synthetics-api`)
+- For real API tests: RHOBS Synthetics API source code (configurable via `RHOBS_SYNTHETICS_API_PATH` environment variable, defaults to `../rhobs-synthetics-api`)
 
 ### Running E2E Tests
 
@@ -189,7 +189,7 @@ The real API server is started with:
 
 #### Requirements
 
-- RHOBS Synthetics API source code must be available (path configurable via `RHOBS_SYNTHETICS_API_PATH` environment variable, defaults to `/Users/drow/src/rhobs-synthetics-api`)
+- RHOBS Synthetics API source code must be available (path configurable via `RHOBS_SYNTHETICS_API_PATH` environment variable, defaults to `../rhobs-synthetics-api`)
 - Go build environment configured
 - No conflicting processes on ports 8080-8099
 

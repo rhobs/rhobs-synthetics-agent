@@ -39,7 +39,7 @@ func NewRealAPIManager() *RealAPIManager {
 	// Get API path from environment variable, fallback to default
 	apiPath := os.Getenv("RHOBS_SYNTHETICS_API_PATH")
 	if apiPath == "" {
-		apiPath = "/Users/drow/src/rhobs-synthetics-api"
+		apiPath = "../rhobs-synthetics-api"
 	}
 
 	return &RealAPIManager{
