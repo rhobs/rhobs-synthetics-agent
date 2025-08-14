@@ -10,6 +10,8 @@ import (
 
 	"github.com/rhobs/rhobs-synthetics-agent/internal/api"
 	"github.com/rhobs/rhobs-synthetics-agent/internal/k8s"
+
+	"github.com/rhobs/rhobs-synthetics-agent/internal/logger"
 )
 
 type Worker struct {
@@ -21,7 +23,7 @@ type Worker struct {
 func NewWorker(cfg *Config) *Worker {
 	var apiClient *api.Client
 	var probeManager *k8s.ProbeManager
-	
+
 	if cfg != nil {
 		if cfg.APIBaseURL != "" {
 			apiClient = api.NewClient(cfg.APIBaseURL, cfg.APITenant, cfg.APIEndpoint, cfg.JWTToken)
@@ -39,35 +41,35 @@ func NewWorker(cfg *Config) *Worker {
 }
 
 func (w *Worker) Start(ctx context.Context, resourceMgr *ResourceManager, taskWG *sync.WaitGroup, shutdownChan chan struct{}) error {
-	log.Println("RHOBS Synthetic Agent worker thread started")
+	logger.Info("RHOBS Synthetic Agent worker thread started")
 
 	ticker := time.NewTicker(w.config.PollingInterval)
 	defer ticker.Stop()
 
 	// Initial run
 	if err := w.processProbes(ctx, resourceMgr, taskWG, shutdownChan); err != nil {
-		log.Printf("initial work failed: %v\n", err)
+		logger.Errorf("initial work failed: %v\n", err)
 	}
 
 	for {
 		select {
 		case <-ctx.Done():
-			log.Println("worker stopping due to context cancellation")
+			logger.Info("worker stopping due to context cancellation")
 			return ctx.Err()
 		case <-shutdownChan:
-			log.Println("worker stopping due to shutdown signal")
+			logger.Info("worker stopping due to shutdown signal")
 			return nil
 		case <-ticker.C:
 			// Check if shutdown is in progress before starting new tasks
 			select {
 			case <-shutdownChan:
-				log.Println("shutdown in progress, skipping new probe processing")
+				logger.Info("shutdown in progress, skipping new probe processing")
 				return nil
 			default:
 			}
 
 			if err := w.processProbes(ctx, resourceMgr, taskWG, shutdownChan); err != nil {
-				log.Printf("work iteration failed: %v\n", err)
+				logger.Errorf("work iteration failed: %v\n", err)
 				// Continue running even if one iteration fails
 			}
 		}
@@ -78,12 +80,12 @@ func (w *Worker) processProbes(ctx context.Context, resourceMgr *ResourceManager
 	// Check if shutdown is in progress before starting new tasks
 	select {
 	case <-shutdownChan:
-		log.Println("shutdown in progress, skipping probe processing")
+		logger.Info("shutdown in progress, skipping probe processing")
 		return nil
 	default:
 	}
 
-	log.Println("Starting probe reconciliation cycle")
+	logger.Info("Starting probe reconciliation cycle")
 
 	// Add task to wait group for graceful shutdown tracking
 	taskWG.Add(1)
@@ -145,14 +147,14 @@ func (w *Worker) fetchProbeList(ctx context.Context) ([]api.Probe, error) {
 		labelSelector = w.config.LabelSelector
 	}
 
-	log.Printf("Fetching probe list from API with label selector: %s", labelSelector)
+	logger.Infof("Fetching probe list from API with label selector: %s", labelSelector)
 
 	probes, err := w.apiClient.GetProbes(labelSelector)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get probes from API: %w", err)
 	}
 
-	log.Printf("Successfully fetched %d probes from API", len(probes))
+	logger.Infof("Successfully fetched %d probes from API", len(probes))
 	return probes, nil
 }
 
@@ -177,11 +179,11 @@ func (w *Worker) processProbe(ctx context.Context, probe api.Probe) error {
 	// For now, we'll log the created resource
 	crJSON, err := json.MarshalIndent(cr, "", "  ")
 	if err != nil {
-		log.Printf("Failed to marshal CR to JSON: %v", err)
+		logger.Infof("Failed to marshal CR to JSON: %v", err)
 	} else {
-		log.Printf("Created probe Custom Resource:\n%s", string(crJSON))
+		logger.Infof("Created probe Custom Resource:\n%s", string(crJSON))
 	}
 
-	log.Printf("Successfully created probe.monitoring.rhobs resource for probe %s", probe.ID)
+	logger.Infof("Successfully created probe.monitoring.rhobs resource for probe %s", probe.ID)
 	return nil
 }
