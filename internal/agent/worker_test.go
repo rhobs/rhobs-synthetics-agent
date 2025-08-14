@@ -5,6 +5,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/rhobs/rhobs-synthetics-agent/internal/api"
 )
 
 func TestNewWorker(t *testing.T) {
@@ -302,5 +304,69 @@ func TestWorker_ConcurrentShutdown(t *testing.T) {
 		// Good, all tasks completed
 	case <-time.After(3 * time.Second):
 		t.Error("Tasks did not complete within timeout after shutdown")
+	}
+}
+
+func TestWorker_processProbe_K8sIntegration(t *testing.T) {
+	cfg := &Config{
+		PollingInterval: 30 * time.Second,
+		GracefulTimeout: 30 * time.Second,
+		Namespace:       "test-namespace",
+		Blackbox: BlackboxConfig{
+			Interval:  "30s",
+			Module:    "http_2xx",
+			ProberURL: "http://blackbox-exporter:9115",
+		},
+	}
+
+	worker := NewWorker(cfg)
+	ctx := context.Background()
+
+	probe := api.Probe{
+		ID:        "test-probe-worker",
+		StaticURL: "http://example.com",
+		Labels: map[string]string{
+			"cluster_id": "test-cluster",
+		},
+		Status: "pending",
+	}
+
+	// This should not fail even when not in K8s cluster
+	// because it falls back to logging
+	err := worker.processProbe(ctx, probe)
+	if err != nil {
+		t.Errorf("processProbe() should not fail when falling back to logging: %v", err)
+	}
+}
+
+func TestWorker_processProbe_FallbackLogging(t *testing.T) {
+	cfg := &Config{
+		PollingInterval: 30 * time.Second,
+		GracefulTimeout: 30 * time.Second,
+		Namespace:       "test-namespace",
+		Blackbox: BlackboxConfig{
+			Interval:  "30s",
+			Module:    "http_2xx",
+			ProberURL: "http://blackbox-exporter:9115",
+		},
+	}
+
+	worker := NewWorker(cfg)
+	ctx := context.Background()
+
+	// Test with an invalid URL to trigger URL validation failure
+	probe := api.Probe{
+		ID:        "test-probe-invalid",
+		StaticURL: "https://non-existent-domain-12345.com",
+		Labels: map[string]string{
+			"cluster_id": "test-cluster",
+		},
+		Status: "pending",
+	}
+
+	// This should fail because URL validation fails
+	err := worker.processProbe(ctx, probe)
+	if err == nil {
+		t.Error("processProbe() should fail when URL validation fails")
 	}
 }
