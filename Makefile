@@ -82,11 +82,10 @@ test-e2e-all: go-mod-download
 
 .PHONY: coverage
 coverage:
-	@echo "Running tests with coverage report..."
-	@go test -coverprofile=coverage.out ./cmd/... ./internal/...
-	@go tool cover -html=coverage.out -o coverage.html
-	@echo "Coverage report generated: coverage.html"
-	@go tool cover -func=coverage.out | grep "total:"
+	hack/codecov.sh
+	@echo ""
+	@echo "Overall coverage:"
+	@go tool cover -func=coverage.out | tail -1
 
 go-mod-tidy:
 	go mod tidy
