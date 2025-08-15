@@ -4,7 +4,11 @@ polling_interval: 10s
 graceful_timeout: 30s
 
 # API Configuration
-api_base_url: "https://observatorium-api.example.com"
+api_base_urls:
+  - "https://observatorium-api-1.example.com"
+  - "https://observatorium-api-2.example.com"
+  - "https://observatorium-api-3.example.com"
+
 api_tenant: "default"
 label_selector: "private=false,rhobs-synthetics/status=pending"
 

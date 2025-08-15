@@ -5,11 +5,12 @@ A synthetic monitoring agent for the Red Hat Observability Service (RHOBS) ecosy
 ## Overview
 
 The RHOBS Synthetics Agent provides:
-- **API Integration**: Polls the RHOBS Probes API to retrieve probe configurations
+- **Multi-API Integration**: Polls multiple RHOBS Probes APIs simultaneously to retrieve probe configurations
 - **URL Validation**: Validates target URLs before creating monitoring resources  
 - **Custom Resource Management**: Creates Probe CRs in Kubernetes (auto-detects `monitoring.rhobs/v1` or `monitoring.coreos.com/v1`)
-- **Status Tracking**: Updates probe status (active/failed) via API calls
+- **Status Tracking**: Updates probe status (active/failed) via API calls across all configured APIs
 - **Label-based Filtering**: Uses configurable label selectors to target specific probes
+- **Probe Deduplication**: Automatically removes duplicate probes when fetching from multiple APIs
 
 ## Quick Start
 
@@ -56,11 +57,12 @@ make lint-ci
 
 ### Probe Reconciliation Workflow
 
-1. **Poll API**: Retrieves probe configurations from `/api/metrics/v1/{tenant}/probes`
-2. **Filter Probes**: Uses label selectors (e.g., `private=false,rhobs-synthetics/status=pending`)
-3. **Validate URLs**: Checks if target URLs are ready for monitoring
-4. **Create Resources**: Generates Probe Custom Resources (auto-detects API group)
-5. **Update Status**: Reports success/failure back to the API via PATCH calls
+1. **Poll APIs**: Retrieves probe configurations from multiple `/api/metrics/v1/{tenant}/probes` endpoints
+2. **Deduplicate**: Removes duplicate probes by URL when multiple APIs return probes monitoring the same endpoint
+3. **Filter Probes**: Uses label selectors (e.g., `private=false,rhobs-synthetics/status=pending`)
+4. **Validate URLs**: Checks if target URLs are ready for monitoring
+5. **Create Resources**: Generates Probe Custom Resources (auto-detects API group)
+6. **Update Status**: Reports success/failure back to all relevant APIs via PATCH calls
 
 ### Label Selector Support
 
@@ -89,7 +91,11 @@ polling_interval: 30s
 graceful_timeout: 60s
 
 # API Configuration
-api_base_url: "https://observatorium-api.example.com"
+api_base_urls:
+  - "https://observatorium-api-1.example.com"
+  - "https://observatorium-api-2.example.com" 
+  - "https://observatorium-api-3.example.com"
+
 api_tenant: "my-tenant"
 label_selector: "private=false,rhobs-synthetics/status=pending"
 
@@ -106,8 +112,9 @@ export LOG_FORMAT=json
 export POLLING_INTERVAL=30s
 export GRACEFUL_TIMEOUT=60s
 
-# API configuration
-export API_BASE_URL="https://observatorium-api.example.com"
+# API configuration - comma-separated list of URLs
+export API_BASE_URLS="https://api1.example.com,https://api2.example.com,https://api3.example.com"
+
 export API_TENANT="my-tenant"
 export LABEL_SELECTOR="private=false,rhobs-synthetics/status=pending"
 
@@ -124,7 +131,9 @@ export NAMESPACE="monitoring"
   --config /path/to/config.yaml \
   --log-level debug \
   --interval 30s \
-  --graceful-timeout 60s
+  --graceful-timeout 60s \
+  --api-base-urls "https://api1.example.com,https://api2.example.com" \
+  --api-tenant "my-tenant"
 ```
 
 ## Architecture
@@ -139,7 +148,7 @@ export NAMESPACE="monitoring"
 ### Data Flow
 
 ```
-RHOBS Probes API → Agent → URL Validation → Custom Resource Creation → Status Update
+Multiple APIs → Agent → Deduplication → URL Validation → Custom Resource Creation → Status Update
 ```
 
 ### Custom Resource Format
@@ -270,7 +279,7 @@ The agent is designed to run as a Kubernetes Deployment with:
 ### Common Issues
 
 1. **API Connection Failures**
-   - Verify `API_BASE_URL` and network connectivity
+   - Verify `API_BASE_URLS` and network connectivity
    - Check API credentials and tenant configuration
 
 2. **URL Validation Failures**

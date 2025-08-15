@@ -2,6 +2,7 @@ package agent
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/spf13/viper"
@@ -14,11 +15,11 @@ type Config struct {
 	GracefulTimeout time.Duration `mapstructure:"graceful_timeout"`
 	
 	// API Configuration
-	APIBaseURL      string `mapstructure:"api_base_url"`
-	APITenant       string `mapstructure:"api_tenant"`
-	LabelSelector   string `mapstructure:"label_selector"`
-	APIEndpoint     string `mapstructure:"api_endpoint"`
-	JWTToken        string `mapstructure:"jwt_token"`
+	APIBaseURLs     []string `mapstructure:"api_base_urls"`     // List of API URLs to poll
+	APITenant       string   `mapstructure:"api_tenant"`
+	LabelSelector   string   `mapstructure:"label_selector"`
+	APIEndpoint     string   `mapstructure:"api_endpoint"`
+	JWTToken        string   `mapstructure:"jwt_token"`
 	
 	// Kubernetes Configuration
 	KubeConfig      string `mapstructure:"kube_config"`
@@ -35,10 +36,16 @@ type BlackboxConfig struct {
 	ProberURL string `mapstructure:"prober_url"`
 }
 
+// GetAPIBaseURLs returns the list of API URLs
+func (c *Config) GetAPIBaseURLs() []string {
+	return c.APIBaseURLs
+}
+
 // String returns a formatted string representation of the configuration
 func (c *Config) String() string {
-	return fmt.Sprintf("LogLevel=%s, LogFormat=%s, PollingInterval=%v, GracefulTimeout=%v",
-		c.LogLevel, c.LogFormat, c.PollingInterval, c.GracefulTimeout)
+	urls := c.GetAPIBaseURLs()
+	return fmt.Sprintf("LogLevel=%s, LogFormat=%s, PollingInterval=%v, GracefulTimeout=%v, APIBaseURLs=%v",
+		c.LogLevel, c.LogFormat, c.PollingInterval, c.GracefulTimeout, urls)
 }
 
 func LoadConfig() (*Config, error) {
@@ -46,7 +53,7 @@ func LoadConfig() (*Config, error) {
 	viper.SetDefault("log_format", "json")
 	viper.SetDefault("polling_interval", "30s")
 	viper.SetDefault("graceful_timeout", "30s")
-	viper.SetDefault("api_base_url", "")
+	viper.SetDefault("api_base_urls", []string{})
 	viper.SetDefault("api_tenant", "default")
 	viper.SetDefault("label_selector", "private=false,rhobs-synthetics/status=pending")
 	viper.SetDefault("api_endpoint", "/api/metrics/v1")
@@ -71,6 +78,15 @@ func LoadConfig() (*Config, error) {
 	var cfg Config
 	if err := viper.Unmarshal(&cfg); err != nil {
 		return nil, err
+	}
+
+	// Handle comma-separated API URLs from environment variables
+	if apiURLsStr := viper.GetString("api_base_urls"); apiURLsStr != "" && len(cfg.APIBaseURLs) == 0 {
+		urls := strings.Split(apiURLsStr, ",")
+		for i, url := range urls {
+			urls[i] = strings.TrimSpace(url)
+		}
+		cfg.APIBaseURLs = urls
 	}
 
 	return &cfg, nil
