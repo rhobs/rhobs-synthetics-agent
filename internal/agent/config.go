@@ -51,6 +51,7 @@ func LoadConfig() (*Config, error) {
 	viper.SetDefault("label_selector", "private=false,rhobs-synthetics/status=pending")
 	viper.SetDefault("api_endpoint", "/api/metrics/v1")
 	viper.SetDefault("jwt_token", "")
+	viper.SetDefault("kube_config", "")
 	viper.SetDefault("namespace", "default")
 	
 	// Blackbox defaults

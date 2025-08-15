@@ -53,12 +53,16 @@ func main() {
 	startCmd.Flags().String("log-level", "info", "Log verbosity: debug, info")
 	startCmd.Flags().Duration("interval", time.Second*30, "Polling interval")
 	startCmd.Flags().String("graceful-timeout", "30s", "Graceful shutdown timeout")
+	startCmd.Flags().String("kubeconfig", "", "Path to kubeconfig file (optional, for out-of-cluster development)")
+	startCmd.Flags().String("namespace", "default", "The Kubernetes namespace for probe resources")
 
 	// Bind flags to viper
 	_ = viper.BindPFlag("config", startCmd.Flags().Lookup("config"))
 	_ = viper.BindPFlag("log_level", startCmd.Flags().Lookup("log-level"))
 	_ = viper.BindPFlag("polling_interval", startCmd.Flags().Lookup("interval"))
 	_ = viper.BindPFlag("graceful_timeout", startCmd.Flags().Lookup("graceful-timeout"))
+	_ = viper.BindPFlag("kube_config", startCmd.Flags().Lookup("kubeconfig"))
+	_ = viper.BindPFlag("namespace", startCmd.Flags().Lookup("namespace"))
 
 	// Add commands to the root command
 	rootCmd.AddCommand(startCmd)

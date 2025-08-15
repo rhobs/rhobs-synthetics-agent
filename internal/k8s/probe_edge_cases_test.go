@@ -9,7 +9,7 @@ import (
 )
 
 func TestProbeManager_ValidateURL_EdgeCases(t *testing.T) {
-	pm := NewProbeManager("test")
+	pm := NewProbeManager("test", "")
 
 	tests := []struct {
 		name        string
@@ -61,7 +61,7 @@ func TestProbeManager_ValidateURL_EdgeCases(t *testing.T) {
 }
 
 func TestProbeManager_ValidateURL_ServerErrors(t *testing.T) {
-	pm := NewProbeManager("test")
+	pm := NewProbeManager("test", "")
 
 	// Test server that returns 500
 	server500 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -93,7 +93,7 @@ func TestProbeManager_CreateProbeResource_MissingLabels(t *testing.T) {
 	}))
 	defer server.Close()
 
-	pm := NewProbeManager("monitoring")
+	pm := NewProbeManager("monitoring", "")
 
 	// Test probe with missing labels
 	probe := api.Probe{
@@ -131,7 +131,7 @@ func TestProbeManager_CreateProbeResource_PartialLabels(t *testing.T) {
 	}))
 	defer server.Close()
 
-	pm := NewProbeManager("monitoring")
+	pm := NewProbeManager("monitoring", "")
 
 	// Test probe with only cluster_id
 	probe := api.Probe{
@@ -166,7 +166,7 @@ func TestProbeManager_CreateProbeResource_PartialLabels(t *testing.T) {
 }
 
 func TestNewProbeManager(t *testing.T) {
-	pm := NewProbeManager("test-namespace")
+	pm := NewProbeManager("test-namespace", "")
 	
 	if pm.namespace != "test-namespace" {
 		t.Errorf("Expected namespace 'test-namespace', got %s", pm.namespace)

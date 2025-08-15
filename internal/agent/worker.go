@@ -26,9 +26,13 @@ func NewWorker(cfg *Config) *Worker {
 		if cfg.APIBaseURL != "" {
 			apiClient = api.NewClient(cfg.APIBaseURL, cfg.APITenant, cfg.APIEndpoint, cfg.JWTToken)
 		}
-		probeManager = k8s.NewProbeManager(cfg.Namespace)
+		namespace := cfg.Namespace
+		if namespace == "" {
+			namespace = "default"
+		}
+		probeManager = k8s.NewProbeManager(namespace, cfg.KubeConfig)
 	} else {
-		probeManager = k8s.NewProbeManager("default")
+		probeManager = k8s.NewProbeManager("default", "")
 	}
 
 	return &Worker{

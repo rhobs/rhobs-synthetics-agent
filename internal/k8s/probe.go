@@ -3,20 +3,17 @@ package k8s
 import (
 	"context"
 	"fmt"
+	"log"
 	"net/http"
 	"net/url"
-	"os"
 	"time"
 
 	"github.com/rhobs/rhobs-synthetics-agent/internal/api"
+	"github.com/rhobs/rhobs-synthetics-api/pkg/kubeclient"
 	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/client-go/dynamic"
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/clientcmd"
 )
 
 // ProbeConfig holds configuration for creating probe resources
@@ -28,18 +25,19 @@ type ProbeConfig struct {
 
 // ProbeManager handles the creation and management of probe Custom Resources
 type ProbeManager struct {
-	namespace     string
-	httpClient    *http.Client
-	kubeClient    kubernetes.Interface
-	dynamicClient dynamic.Interface
-	isK8sCluster  bool
-	hasProbeCRD   bool
+	namespace      string
+	kubeconfigPath string
+	httpClient     *http.Client
+	kubeClient     *kubeclient.Client
+	isK8sCluster   bool
+	probeAPIGroup  string // "monitoring.rhobs" or "monitoring.coreos.com" or ""
 }
 
 // NewProbeManager creates a new probe manager
-func NewProbeManager(namespace string) *ProbeManager {
+func NewProbeManager(namespace, kubeconfigPath string) *ProbeManager {
 	pm := &ProbeManager{
-		namespace: namespace,
+		namespace:      namespace,
+		kubeconfigPath: kubeconfigPath,
 		httpClient: &http.Client{
 			Timeout: 10 * time.Second,
 		},
@@ -87,102 +85,71 @@ func (pm *ProbeManager) ValidateURL(targetURL string) error {
 // initializeK8sClients sets up Kubernetes clients and checks cluster capabilities
 func (pm *ProbeManager) initializeK8sClients() {
 	// Check if running in a Kubernetes cluster
-	if !pm.isRunningInK8sCluster() {
+	if !kubeclient.IsRunningInK8sCluster() {
 		pm.isK8sCluster = false
 		return
 	}
 
-	// Create Kubernetes config
-	config, err := pm.createK8sConfig()
+	// Create Kubernetes client
+	cfg := kubeclient.Config{
+		KubeconfigPath: pm.kubeconfigPath,
+	}
+
+	client, err := kubeclient.NewClient(cfg)
 	if err != nil {
+		log.Printf("Failed to create Kubernetes client: %v", err)
 		pm.isK8sCluster = false
 		return
 	}
 
-	// Create clients
-	kubeClient, err := kubernetes.NewForConfig(config)
-	if err != nil {
-		pm.isK8sCluster = false
-		return
-	}
-
-	dynamicClient, err := dynamic.NewForConfig(config)
-	if err != nil {
-		pm.isK8sCluster = false
-		return
-	}
-
-	pm.kubeClient = kubeClient
-	pm.dynamicClient = dynamicClient
+	pm.kubeClient = client
 	pm.isK8sCluster = true
 
 	// Check if Probe CRD exists
-	pm.checkProbeCRD()
+	pm.checkProbeCRDs()
 }
 
-// isRunningInK8sCluster checks if the agent is running in a Kubernetes cluster
-func (pm *ProbeManager) isRunningInK8sCluster() bool {
-	// Check for service account token file (standard in K8s pods)
-	if _, err := os.Stat("/var/run/secrets/kubernetes.io/serviceaccount/token"); err == nil {
-		return true
-	}
 
-	// Check for KUBERNETES_SERVICE_HOST environment variable
-	if os.Getenv("KUBERNETES_SERVICE_HOST") != "" {
-		return true
-	}
 
-	return false
-}
-
-// createK8sConfig creates a Kubernetes client configuration
-func (pm *ProbeManager) createK8sConfig() (*rest.Config, error) {
-	// Try in-cluster config first (when running in a pod)
-	if config, err := rest.InClusterConfig(); err == nil {
-		return config, nil
-	}
-
-	// Fall back to kubeconfig (for local development)
-	kubeconfig := os.Getenv("KUBECONFIG")
-	if kubeconfig == "" {
-		homeDir, err := os.UserHomeDir()
-		if err != nil {
-			return nil, fmt.Errorf("failed to get home directory: %w", err)
-		}
-		kubeconfig = homeDir + "/.kube/config"
-	}
-
-	return clientcmd.BuildConfigFromFlags("", kubeconfig)
-}
-
-// checkProbeCRD checks if the Probe CRD exists in the cluster
-func (pm *ProbeManager) checkProbeCRD() {
+// checkProbeCRDs checks if Probe CRDs exist in the cluster
+func (pm *ProbeManager) checkProbeCRDs() {
 	if pm.kubeClient == nil {
-		pm.hasProbeCRD = false
 		return
 	}
 
-	// Check if the CRD exists
-	crdClient := pm.kubeClient.Discovery()
+	// Check if the CRDs exist
+	crdClient := pm.kubeClient.Clientset().Discovery()
 	_, apiLists, err := crdClient.ServerGroupsAndResources()
 	if err != nil {
-		pm.hasProbeCRD = false
 		return
 	}
 
-	// Look for monitoring.coreos.com/v1 Probe resource
+	// Prefer monitoring.rhobs, fallback to monitoring.coreos.com
 	for _, apiList := range apiLists {
-		if apiList.GroupVersion == "monitoring.coreos.com/v1" {
+		if apiList.GroupVersion == "monitoring.rhobs/v1" {
 			for _, resource := range apiList.APIResources {
 				if resource.Kind == "Probe" {
-					pm.hasProbeCRD = true
+					pm.probeAPIGroup = "monitoring.rhobs"
+					log.Printf("Using monitoring.rhobs/v1 for Probe resources")
 					return
 				}
 			}
 		}
 	}
 
-	pm.hasProbeCRD = false
+	for _, apiList := range apiLists {
+		if apiList.GroupVersion == "monitoring.coreos.com/v1" {
+			for _, resource := range apiList.APIResources {
+				if resource.Kind == "Probe" {
+					pm.probeAPIGroup = "monitoring.coreos.com"
+					log.Printf("Using monitoring.coreos.com/v1 for Probe resources")
+					return
+				}
+			}
+		}
+	}
+
+	log.Printf("No compatible Probe CRDs found in cluster")
 }
 
 // CreateProbeK8sResource creates and applies a Probe Custom Resource to Kubernetes
@@ -192,12 +159,12 @@ func (pm *ProbeManager) CreateProbeK8sResource(probe api.Probe, config ProbeConf
 		return fmt.Errorf("not running in a Kubernetes cluster")
 	}
 
-	if !pm.hasProbeCRD {
-		return fmt.Errorf("probe CRD (monitoring.coreos.com/v1) not found in cluster")
+	if pm.probeAPIGroup == "" {
+		return fmt.Errorf("no compatible Probe CRDs found in cluster")
 	}
 
-	if pm.dynamicClient == nil {
-		return fmt.Errorf("kubernetes dynamic client not available")
+	if pm.kubeClient == nil {
+		return fmt.Errorf("kubernetes client not available")
 	}
 
 	// Create the probe Custom Resource definition
@@ -209,8 +176,8 @@ func (pm *ProbeManager) CreateProbeK8sResource(probe api.Probe, config ProbeConf
 	// Convert to unstructured for dynamic client
 	unstructuredCR := &unstructured.Unstructured{}
 	unstructuredCR.SetUnstructuredContent(map[string]interface{}{
-		"apiVersion": probeResource.APIVersion,
-		"kind":       probeResource.Kind,
+		"apiVersion": pm.probeAPIGroup + "/v1",
+		"kind":       "Probe",
 		"metadata":   probeResource.ObjectMeta,
 		"spec": map[string]interface{}{
 			"prober": map[string]interface{}{
@@ -229,7 +196,7 @@ func (pm *ProbeManager) CreateProbeK8sResource(probe api.Probe, config ProbeConf
 
 	// Define the GVR for Probe resources
 	probeGVR := schema.GroupVersionResource{
-		Group:    "monitoring.coreos.com",
+		Group:    pm.probeAPIGroup,
 		Version:  "v1",
 		Resource: "probes",
 	}
@@ -238,7 +205,7 @@ func (pm *ProbeManager) CreateProbeK8sResource(probe api.Probe, config ProbeConf
 	defer cancel()
 
 	// Create the resource in Kubernetes
-	_, err = pm.dynamicClient.Resource(probeGVR).Namespace(pm.namespace).Create(
+	_, err = pm.kubeClient.DynamicClient().Resource(probeGVR).Namespace(pm.namespace).Create(
 		ctx,
 		unstructuredCR,
 		metav1.CreateOptions{},
@@ -251,7 +218,7 @@ func (pm *ProbeManager) CreateProbeK8sResource(probe api.Probe, config ProbeConf
 	return nil
 }
 
-// CreateProbeResource creates a monitoring.coreos.com/v1 Probe Custom Resource
+// CreateProbeResource creates a Probe Custom Resource (compatible with both monitoring.coreos.com/v1 and monitoring.rhobs/v1)
 func (pm *ProbeManager) CreateProbeResource(probe api.Probe, config ProbeConfig) (*monitoringv1.Probe, error) {
 	if err := pm.ValidateURL(probe.StaticURL); err != nil {
 		return nil, fmt.Errorf("URL validation failed for probe %s: %w", probe.ID, err)
