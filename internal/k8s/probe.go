@@ -8,9 +8,9 @@ import (
 	"net/url"
 	"time"
 
+	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/rhobs/rhobs-synthetics-agent/internal/api"
 	"github.com/rhobs/rhobs-synthetics-api/pkg/kubeclient"
-	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -108,8 +108,6 @@ func (pm *ProbeManager) initializeK8sClients() {
 	// Check if Probe CRD exists
 	pm.checkProbeCRDs()
 }
-
-
 
 // checkProbeCRDs checks if Probe CRDs exist in the cluster
 func (pm *ProbeManager) checkProbeCRDs() {
@@ -275,4 +273,3 @@ func (pm *ProbeManager) CreateProbeResource(probe api.Probe, config ProbeConfig)
 
 	return probeResource, nil
 }
-

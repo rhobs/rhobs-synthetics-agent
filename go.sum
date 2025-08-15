@@ -741,6 +741,8 @@ github.com/prometheus/prometheus v1.8.2-0.20200507164740-ecee9c8abfd1/go.mod h1:
 github.com/prometheus/prometheus v1.8.2-0.20200609102542-5d7e3e970602/go.mod h1:CwaXafRa0mm72de2GQWtfQxjGytbSKIGivWxQvjpRZs=
 github.com/rcrowley/go-metrics v0.0.0-20181016184325-3113b8401b8a/go.mod h1:bCqnVzQkZxMG4s8nGwiZ5l3QUCyqpo9Y+/ZMZ9VjZe4=
 github.com/retailnext/hllpp v1.0.1-0.20180308014038-101a6d2f8b52/go.mod h1:RDpi1RftBQPUCDRw6SmxeaREsAaRKnOclghuzp/WRzc=
+github.com/rhobs/rhobs-synthetics-api v0.0.0-20250815182719-cea7d4656cd0 h1:JpH7oHiBWP1Yjtn4LvuUecGMWwtCDRv+x/KNGRbVLbM=
+github.com/rhobs/rhobs-synthetics-api v0.0.0-20250815182719-cea7d4656cd0/go.mod h1:g91hHxfOXUjtBruFJTrEKfTAYmmMz07L+6q/z1x+xcU=
 github.com/rogpeppe/fastuuid v0.0.0-20150106093220-6724a57986af/go.mod h1:XWv6SoW27p1b0cqNHllgS5HIMJraePCO15w5zCzIWYg=
 github.com/rogpeppe/fastuuid v1.2.0/go.mod h1:jVj6XXZzXRy/MSR5jhDC/2q6DgLz+nrA6LYCDYWNEvQ=
 github.com/rogpeppe/go-internal v1.1.0/go.mod h1:M8bDsm7K2OlrFYOpmOWEs/qY81heoFRclV5y23lUDJ4=
