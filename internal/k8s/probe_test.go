@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/rhobs/rhobs-synthetics-agent/internal/api"
+	"github.com/rhobs/rhobs-synthetics-api/pkg/kubeclient"
 )
 
 func TestProbeManager_ValidateURL(t *testing.T) {
@@ -15,7 +16,7 @@ func TestProbeManager_ValidateURL(t *testing.T) {
 	}))
 	defer server.Close()
 
-	pm := NewProbeManager("test-namespace")
+	pm := NewProbeManager("test-namespace", "")
 
 	// Test valid URL
 	err := pm.ValidateURL(server.URL)
@@ -43,7 +44,7 @@ func TestProbeManager_CreateProbeResource(t *testing.T) {
 	}))
 	defer server.Close()
 
-	pm := NewProbeManager("monitoring")
+	pm := NewProbeManager("monitoring", "")
 
 	probe := api.Probe{
 		ID:        "test-probe-1",
@@ -68,8 +69,8 @@ func TestProbeManager_CreateProbeResource(t *testing.T) {
 	}
 
 	// Verify the Custom Resource structure
-	if cr.APIVersion != "monitoring.rhobs/v1" {
-		t.Errorf("Expected APIVersion 'monitoring.rhobs/v1', got %s", cr.APIVersion)
+	if cr.APIVersion != "monitoring.coreos.com/v1" {
+		t.Errorf("Expected APIVersion 'monitoring.coreos.com/v1', got %s", cr.APIVersion)
 	}
 
 	if cr.Kind != "Probe" {
@@ -77,12 +78,12 @@ func TestProbeManager_CreateProbeResource(t *testing.T) {
 	}
 
 	expectedName := "probe-test-probe-1"
-	if cr.Metadata["name"] != expectedName {
-		t.Errorf("Expected name '%s', got %s", expectedName, cr.Metadata["name"])
+	if cr.Name != expectedName {
+		t.Errorf("Expected name '%s', got %s", expectedName, cr.Name)
 	}
 
-	if cr.Metadata["namespace"] != "monitoring" {
-		t.Errorf("Expected namespace 'monitoring', got %s", cr.Metadata["namespace"])
+	if cr.Namespace != "monitoring" {
+		t.Errorf("Expected namespace 'monitoring', got %s", cr.Namespace)
 	}
 
 	// Verify the spec
@@ -94,12 +95,12 @@ func TestProbeManager_CreateProbeResource(t *testing.T) {
 		t.Errorf("Expected module 'http_2xx', got %s", cr.Spec.Module)
 	}
 
-	if len(cr.Spec.Targets.StaticConfig.Static) != 1 {
-		t.Errorf("Expected 1 target, got %d", len(cr.Spec.Targets.StaticConfig.Static))
+	if len(cr.Spec.Targets.StaticConfig.Targets) != 1 {
+		t.Errorf("Expected 1 target, got %d", len(cr.Spec.Targets.StaticConfig.Targets))
 	}
 
-	if cr.Spec.Targets.StaticConfig.Static[0] != server.URL {
-		t.Errorf("Expected target URL '%s', got %s", server.URL, cr.Spec.Targets.StaticConfig.Static[0])
+	if cr.Spec.Targets.StaticConfig.Targets[0] != server.URL {
+		t.Errorf("Expected target URL '%s', got %s", server.URL, cr.Spec.Targets.StaticConfig.Targets[0])
 	}
 
 	// Verify labels
@@ -109,7 +110,7 @@ func TestProbeManager_CreateProbeResource(t *testing.T) {
 }
 
 func TestProbeManager_CreateProbeResource_InvalidURL(t *testing.T) {
-	pm := NewProbeManager("monitoring")
+	pm := NewProbeManager("monitoring", "")
 
 	probe := api.Probe{
 		ID:        "test-probe-invalid",
@@ -130,5 +131,89 @@ func TestProbeManager_CreateProbeResource_InvalidURL(t *testing.T) {
 	_, err := pm.CreateProbeResource(probe, probeConfig)
 	if err == nil {
 		t.Error("CreateProbeResource() should fail for invalid URL")
+	}
+}
+
+func TestProbeManager_isRunningInK8sCluster(t *testing.T) {
+	// Test the kubeclient function directly since ProbeManager no longer has this method
+	result := kubeclient.IsRunningInK8sCluster()
+	
+	// In test environment, should return false since we don't have K8s service account
+	if result {
+		t.Log("Running in actual Kubernetes environment - this is expected if tests are run in a K8s pod")
+	} else {
+		t.Log("Not running in Kubernetes environment - this is expected for local testing")
+	}
+}
+
+func TestProbeManager_initializeK8sClients(t *testing.T) {
+	pm := NewProbeManager("test-namespace", "")
+
+	// After initialization, check state
+	if pm.isK8sCluster {
+		// If we're actually in a K8s cluster
+		if pm.kubeClient == nil {
+			t.Error("kubeClient should not be nil when in K8s cluster")
+		}
+		if pm.kubeClient.DynamicClient() == nil {
+			t.Error("dynamicClient should not be nil when in K8s cluster")
+		}
+	} else {
+		// If we're not in a K8s cluster (normal test case)
+		if pm.kubeClient != nil {
+			t.Error("kubeClient should be nil when not in K8s cluster")
+		}
+	}
+}
+
+func TestProbeManager_CreateProbeK8sResource_NotInCluster(t *testing.T) {
+	// Create a test server for URL validation
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	pm := NewProbeManager("test-namespace", "")
+
+	probe := api.Probe{
+		ID:        "test-probe-k8s",
+		StaticURL: server.URL,
+		Labels: map[string]string{
+			"cluster_id": "test-cluster",
+		},
+		Status: "pending",
+	}
+
+	probeConfig := ProbeConfig{
+		Interval:  "30s",
+		Module:    "http_2xx",
+		ProberURL: "http://blackbox-exporter:9115",
+	}
+
+	// This should fail because we're not in a K8s cluster
+	err := pm.CreateProbeK8sResource(probe, probeConfig)
+	if err == nil {
+		t.Error("CreateProbeK8sResource() should fail when not in K8s cluster")
+	}
+
+	expectedError := "not running in a Kubernetes cluster"
+	if err.Error() != expectedError {
+		t.Errorf("Expected error '%s', got '%s'", expectedError, err.Error())
+	}
+}
+
+func TestProbeManager_checkProbeCRDs_NoClient(t *testing.T) {
+	pm := &ProbeManager{
+		namespace:     "test",
+		httpClient:    &http.Client{},
+		kubeClient:    nil,
+		isK8sCluster:  false,
+		probeAPIGroup: "",
+	}
+
+	pm.checkProbeCRDs()
+
+	if pm.probeAPIGroup != "" {
+		t.Error("probeAPIGroup should be empty when kubeClient is nil")
 	}
 }

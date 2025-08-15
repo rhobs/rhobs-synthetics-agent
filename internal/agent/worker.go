@@ -21,14 +21,18 @@ type Worker struct {
 func NewWorker(cfg *Config) *Worker {
 	var apiClient *api.Client
 	var probeManager *k8s.ProbeManager
-	
+
 	if cfg != nil {
 		if cfg.APIBaseURL != "" {
 			apiClient = api.NewClient(cfg.APIBaseURL, cfg.APITenant, cfg.APIEndpoint, cfg.JWTToken)
 		}
-		probeManager = k8s.NewProbeManager(cfg.Namespace)
+		namespace := cfg.Namespace
+		if namespace == "" {
+			namespace = "default"
+		}
+		probeManager = k8s.NewProbeManager(namespace, cfg.KubeConfig)
 	} else {
-		probeManager = k8s.NewProbeManager("default")
+		probeManager = k8s.NewProbeManager("default", "")
 	}
 
 	return &Worker{
@@ -167,21 +171,27 @@ func (w *Worker) processProbe(ctx context.Context, probe api.Probe) error {
 		ProberURL: w.config.Blackbox.ProberURL,
 	}
 
-	// Create the probe Custom Resource
-	cr, err := w.probeManager.CreateProbeResource(probe, probeConfig)
+	// Try to create the probe Custom Resource in Kubernetes
+	err := w.probeManager.CreateProbeK8sResource(probe, probeConfig)
 	if err != nil {
-		return fmt.Errorf("failed to create probe resource: %w", err)
-	}
+		// If K8s creation fails, fall back to logging the resource definition
+		log.Printf("Failed to create Kubernetes resource (falling back to logging): %v", err)
 
-	// In a real implementation, this would apply the CR to the Kubernetes cluster
-	// For now, we'll log the created resource
-	crJSON, err := json.MarshalIndent(cr, "", "  ")
-	if err != nil {
-		log.Printf("Failed to marshal CR to JSON: %v", err)
+		cr, crErr := w.probeManager.CreateProbeResource(probe, probeConfig)
+		if crErr != nil {
+			return fmt.Errorf("failed to create probe resource definition: %w", crErr)
+		}
+
+		crJSON, jsonErr := json.MarshalIndent(cr, "", "  ")
+		if jsonErr != nil {
+			log.Printf("Failed to marshal CR to JSON: %v", jsonErr)
+		} else {
+			log.Printf("Would create probe Custom Resource:\n%s", string(crJSON))
+		}
+
+		log.Printf("Probe %s processed (logged only - not running in compatible K8s cluster)", probe.ID)
 	} else {
-		log.Printf("Created probe Custom Resource:\n%s", string(crJSON))
+		log.Printf("Successfully created monitoring.coreos.com/v1 Probe resource for probe %s", probe.ID)
 	}
-
-	log.Printf("Successfully created probe.monitoring.rhobs resource for probe %s", probe.ID)
 	return nil
 }

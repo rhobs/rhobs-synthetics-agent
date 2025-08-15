@@ -7,7 +7,7 @@ A synthetic monitoring agent for the Red Hat Observability Service (RHOBS) ecosy
 The RHOBS Synthetics Agent provides:
 - **API Integration**: Polls the RHOBS Probes API to retrieve probe configurations
 - **URL Validation**: Validates target URLs before creating monitoring resources  
-- **Custom Resource Management**: Creates `probe.monitoring.rhobs` CRs in Kubernetes
+- **Custom Resource Management**: Creates Probe CRs in Kubernetes (auto-detects `monitoring.rhobs/v1` or `monitoring.coreos.com/v1`)
 - **Status Tracking**: Updates probe status (active/failed) via API calls
 - **Label-based Filtering**: Uses configurable label selectors to target specific probes
 
@@ -59,7 +59,7 @@ make lint-ci
 1. **Poll API**: Retrieves probe configurations from `/api/metrics/v1/{tenant}/probes`
 2. **Filter Probes**: Uses label selectors (e.g., `private=false,rhobs-synthetics/status=pending`)
 3. **Validate URLs**: Checks if target URLs are ready for monitoring
-4. **Create Resources**: Generates `probe.monitoring.rhobs` Custom Resources
+4. **Create Resources**: Generates Probe Custom Resources (auto-detects API group)
 5. **Update Status**: Reports success/failure back to the API via PATCH calls
 
 ### Label Selector Support
@@ -144,7 +144,7 @@ RHOBS Probes API → Agent → URL Validation → Custom Resource Creation → S
 
 ### Custom Resource Format
 
-Generated `probe.monitoring.rhobs` resources include:
+Generated Probe resources include (example shows `monitoring.rhobs/v1`, but `monitoring.coreos.com/v1` is also supported):
 
 ```yaml
 apiVersion: monitoring.rhobs/v1
@@ -263,7 +263,7 @@ make docker-push
 The agent is designed to run as a Kubernetes Deployment with:
 - Service account with permissions to create Custom Resources
 - ConfigMap or Secret for API credentials
-- Appropriate RBAC for probe.monitoring.rhobs resources
+- Appropriate RBAC for Probe resources (monitoring.rhobs/v1 and/or monitoring.coreos.com/v1)
 
 ## Troubleshooting
 
@@ -279,7 +279,7 @@ The agent is designed to run as a Kubernetes Deployment with:
 
 3. **Custom Resource Creation Issues**
    - Verify Kubernetes permissions and RBAC
-   - Check if CRD is installed: `kubectl get crd probe.monitoring.rhobs`
+   - Check if CRDs are installed: `kubectl get crd probes.monitoring.rhobs probes.monitoring.coreos.com`
 
 ### Debug Mode
 
