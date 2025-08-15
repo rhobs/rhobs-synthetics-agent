@@ -34,7 +34,7 @@ func TestAgent_E2E_WithRealAPI(t *testing.T) {
 		LogFormat:       "text",
 		PollingInterval: 1 * time.Second,
 		GracefulTimeout: 2 * time.Second,
-		APIBaseURL:      apiManager.GetURL(),
+		APIBaseURLs:      []string{apiManager.GetURL()},
 		APIEndpoint:     "/probes",
 		LabelSelector:   "env=test,private=false",
 	}
@@ -189,7 +189,7 @@ func TestAgent_E2E_RealAPI_ErrorHandling(t *testing.T) {
 			LogFormat:       "text", 
 			PollingInterval: 1 * time.Second,
 			GracefulTimeout: 2 * time.Second,
-			APIBaseURL:      "http://localhost:9999", // Non-existent server
+			APIBaseURLs:      []string{"http://localhost:9999"}, // Non-existent server
 			APIEndpoint:     "/probes",
 			LabelSelector:   "env=test",
 		}
@@ -258,7 +258,7 @@ func TestAgent_E2E_RealAPI_ConfigurationVariations(t *testing.T) {
 				LogFormat:       "json",
 				PollingInterval: 1 * time.Second,
 				GracefulTimeout: 2 * time.Second,
-				APIBaseURL:      apiManager.GetURL(),
+				APIBaseURLs:      []string{apiManager.GetURL()},
 				APIEndpoint:     "/probes",
 				LabelSelector:   "", // No selector - should get all probes
 			},
@@ -271,7 +271,7 @@ func TestAgent_E2E_RealAPI_ConfigurationVariations(t *testing.T) {
 				LogFormat:       "json",
 				PollingInterval: 1 * time.Second,
 				GracefulTimeout: 2 * time.Second,
-				APIBaseURL:      apiManager.GetURL(),
+				APIBaseURLs:      []string{apiManager.GetURL()},
 				APIEndpoint:     "/probes",
 				LabelSelector:   "env=test,private=false,nonexistent=value",
 			},
@@ -295,7 +295,7 @@ func TestAgent_E2E_RealAPI_ConfigurationVariations(t *testing.T) {
 			time.Sleep(2 * time.Second)
 
 			// Test API client with same configuration
-			client := api.NewClient(tc.config.APIBaseURL, "", tc.config.APIEndpoint, "")
+			client := api.NewClient(tc.config.APIBaseURLs[0], "", tc.config.APIEndpoint, "")
 			probes, err := client.GetProbes(tc.config.LabelSelector)
 			
 			if err != nil {

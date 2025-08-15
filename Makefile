@@ -113,7 +113,11 @@ example-config:
 		echo "graceful_timeout: 30s" >> example-config.yaml; \
 		echo "" >> example-config.yaml; \
 		echo "# API Configuration" >> example-config.yaml; \
-		echo "api_base_url: \"https://observatorium-api.example.com\"" >> example-config.yaml; \
+		echo "api_base_urls:" >> example-config.yaml; \
+		echo "  - \"https://observatorium-api-1.example.com\"" >> example-config.yaml; \
+		echo "  - \"https://observatorium-api-2.example.com\"" >> example-config.yaml; \
+		echo "  - \"https://observatorium-api-3.example.com\"" >> example-config.yaml; \
+		echo "" >> example-config.yaml; \
 		echo "api_tenant: \"default\"" >> example-config.yaml; \
 		echo "label_selector: \"private=false,rhobs-synthetics/status=pending\"" >> example-config.yaml; \
 		echo "" >> example-config.yaml; \

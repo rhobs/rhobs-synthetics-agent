@@ -22,7 +22,7 @@ func TestConfig_String(t *testing.T) {
 				PollingInterval: 30 * time.Second,
 				GracefulTimeout: 30 * time.Second,
 			},
-			expected: "LogLevel=info, LogFormat=json, PollingInterval=30s, GracefulTimeout=30s",
+			expected: "LogLevel=info, LogFormat=json, PollingInterval=30s, GracefulTimeout=30s, APIBaseURLs=[]",
 		},
 		{
 			name: "debug config",
@@ -32,7 +32,7 @@ func TestConfig_String(t *testing.T) {
 				PollingInterval: 60 * time.Second,
 				GracefulTimeout: 45 * time.Second,
 			},
-			expected: "LogLevel=debug, LogFormat=text, PollingInterval=1m0s, GracefulTimeout=45s",
+			expected: "LogLevel=debug, LogFormat=text, PollingInterval=1m0s, GracefulTimeout=45s, APIBaseURLs=[]",
 		},
 		{
 			name: "custom config",
@@ -42,7 +42,7 @@ func TestConfig_String(t *testing.T) {
 				PollingInterval: 2 * time.Minute,
 				GracefulTimeout: 90 * time.Second,
 			},
-			expected: "LogLevel=warn, LogFormat=structured, PollingInterval=2m0s, GracefulTimeout=1m30s",
+			expected: "LogLevel=warn, LogFormat=structured, PollingInterval=2m0s, GracefulTimeout=1m30s, APIBaseURLs=[]",
 		},
 	}
 
@@ -296,5 +296,164 @@ graceful_timeout: 120s
 
 	if cfg.GracefulTimeout != 120*time.Second {
 		t.Errorf("Expected GracefulTimeout to be 120s (from config), got %v", cfg.GracefulTimeout)
+	}
+}
+
+func TestConfig_GetAPIBaseURLs(t *testing.T) {
+	tests := []struct {
+		name     string
+		config   *Config
+		expected []string
+	}{
+		{
+			name: "empty URLs",
+			config: &Config{
+				APIBaseURLs: []string{},
+			},
+			expected: []string{},
+		},
+		{
+			name: "single URL",
+			config: &Config{
+				APIBaseURLs: []string{"https://api.example.com"},
+			},
+			expected: []string{"https://api.example.com"},
+		},
+		{
+			name: "multiple URLs",
+			config: &Config{
+				APIBaseURLs: []string{
+					"https://api1.example.com",
+					"https://api2.example.com",
+					"https://api3.example.com",
+				},
+			},
+			expected: []string{
+				"https://api1.example.com",
+				"https://api2.example.com",
+				"https://api3.example.com",
+			},
+		},
+		{
+			name: "nil URLs slice",
+			config: &Config{
+				APIBaseURLs: nil,
+			},
+			expected: []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := tt.config.GetAPIBaseURLs()
+			if len(result) != len(tt.expected) {
+				t.Errorf("GetAPIBaseURLs() returned %d URLs, expected %d", len(result), len(tt.expected))
+				return
+			}
+			for i, url := range result {
+				if url != tt.expected[i] {
+					t.Errorf("GetAPIBaseURLs()[%d] = %q, expected %q", i, url, tt.expected[i])
+				}
+			}
+		})
+	}
+}
+
+func TestLoadConfig_APIBaseURLsFromEnvironment(t *testing.T) {
+	// Reset viper to ensure clean state
+	viper.Reset()
+
+	tests := []struct {
+		name     string
+		envValue string
+		expected []string
+	}{
+		{
+			name:     "single URL",
+			envValue: "https://api.example.com",
+			expected: []string{"https://api.example.com"},
+		},
+		{
+			name:     "multiple URLs",
+			envValue: "https://api1.example.com,https://api2.example.com,https://api3.example.com",
+			expected: []string{"https://api1.example.com", "https://api2.example.com", "https://api3.example.com"},
+		},
+		{
+			name:     "empty string",
+			envValue: "",
+			expected: []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Reset viper for each test
+			viper.Reset()
+			
+			if tt.envValue != "" {
+				_ = os.Setenv("API_BASE_URLS", tt.envValue)
+			}
+			
+			defer func() {
+				_ = os.Unsetenv("API_BASE_URLS")
+			}()
+
+			cfg, err := LoadConfig()
+			if err != nil {
+				t.Fatalf("LoadConfig() failed: %v", err)
+			}
+
+			urls := cfg.GetAPIBaseURLs()
+			if len(urls) != len(tt.expected) {
+				t.Errorf("Expected %d URLs, got %d", len(tt.expected), len(urls))
+				return
+			}
+
+			for i, url := range urls {
+				if url != tt.expected[i] {
+					t.Errorf("Expected URL[%d] = %q, got %q", i, tt.expected[i], url)
+				}
+			}
+		})
+	}
+}
+
+func TestConfig_String_WithAPIBaseURLs(t *testing.T) {
+	tests := []struct {
+		name     string
+		config   *Config
+		expected string
+	}{
+		{
+			name: "with single API URL",
+			config: &Config{
+				LogLevel:        "info",
+				LogFormat:       "json",
+				PollingInterval: 30 * time.Second,
+				GracefulTimeout: 30 * time.Second,
+				APIBaseURLs:     []string{"https://api.example.com"},
+			},
+			expected: "LogLevel=info, LogFormat=json, PollingInterval=30s, GracefulTimeout=30s, APIBaseURLs=[https://api.example.com]",
+		},
+		{
+			name: "with multiple API URLs",
+			config: &Config{
+				LogLevel:        "debug",
+				LogFormat:       "text",
+				PollingInterval: 60 * time.Second,
+				GracefulTimeout: 45 * time.Second,
+				APIBaseURLs:     []string{"https://api1.example.com", "https://api2.example.com"},
+			},
+			expected: "LogLevel=debug, LogFormat=text, PollingInterval=1m0s, GracefulTimeout=45s, APIBaseURLs=[https://api1.example.com https://api2.example.com]",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := tt.config.String()
+			if result != tt.expected {
+				t.Errorf("Config.String() = %q, expected %q", result, tt.expected)
+			}
+		})
 	}
 }

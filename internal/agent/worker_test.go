@@ -2,6 +2,8 @@ package agent
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"sync"
 	"testing"
 	"time"
@@ -191,16 +193,19 @@ func TestWorker_fetchProbeList(t *testing.T) {
 	cfg := &Config{
 		PollingInterval: 30 * time.Second,
 		GracefulTimeout: 30 * time.Second,
-		APIBaseURL:      "",
+		APIBaseURLs:      []string{},
 	}
 
 	worker := NewWorker(cfg)
 	ctx := context.Background()
 
-	// Test that fetchProbeList fails gracefully without API client
-	_, err := worker.fetchProbeList(ctx)
-	if err == nil {
-		t.Error("Expected fetchProbeList to fail when API client is not configured")
+	// Test that fetchProbeList returns empty slice without API client
+	probes, err := worker.fetchProbeList(ctx)
+	if err != nil {
+		t.Errorf("fetchProbeList should not fail when no API client is configured, got error: %v", err)
+	}
+	if len(probes) != 0 {
+		t.Errorf("fetchProbeList should return empty slice when no API clients configured, got %d probes", len(probes))
 	}
 }
 
@@ -208,7 +213,7 @@ func TestWorker_fetchProbeList_WithAPI(t *testing.T) {
 	cfg := &Config{
 		PollingInterval: 30 * time.Second,
 		GracefulTimeout: 30 * time.Second,
-		APIBaseURL:      "http://example.com",
+		APIBaseURLs:      []string{"http://example.com"},
 		APITenant:       "test",
 		LabelSelector:   "test=true",
 	}
@@ -368,5 +373,213 @@ func TestWorker_processProbe_FallbackLogging(t *testing.T) {
 	err := worker.processProbe(ctx, probe)
 	if err == nil {
 		t.Error("processProbe() should fail when URL validation fails")
+	}
+}
+
+func TestWorker_deduplicateProbes(t *testing.T) {
+	cfg := &Config{
+		PollingInterval: 30 * time.Second,
+		GracefulTimeout: 30 * time.Second,
+	}
+	worker := NewWorker(cfg)
+
+	tests := []struct {
+		name     string
+		probes   []api.Probe
+		expected []api.Probe
+	}{
+		{
+			name:     "empty slice",
+			probes:   []api.Probe{},
+			expected: []api.Probe{},
+		},
+		{
+			name: "no duplicates",
+			probes: []api.Probe{
+				{ID: "probe-1", StaticURL: "https://example1.com"},
+				{ID: "probe-2", StaticURL: "https://example2.com"},
+				{ID: "probe-3", StaticURL: "https://example3.com"},
+			},
+			expected: []api.Probe{
+				{ID: "probe-1", StaticURL: "https://example1.com"},
+				{ID: "probe-2", StaticURL: "https://example2.com"},
+				{ID: "probe-3", StaticURL: "https://example3.com"},
+			},
+		},
+		{
+			name: "with duplicates by URL",
+			probes: []api.Probe{
+				{ID: "probe-1", StaticURL: "https://example1.com"},
+				{ID: "probe-2", StaticURL: "https://example2.com"},
+				{ID: "probe-3", StaticURL: "https://example1.com"}, // Same URL as probe-1
+				{ID: "probe-4", StaticURL: "https://example3.com"},
+				{ID: "probe-5", StaticURL: "https://example2.com"}, // Same URL as probe-2
+			},
+			expected: []api.Probe{
+				{ID: "probe-1", StaticURL: "https://example1.com"},
+				{ID: "probe-2", StaticURL: "https://example2.com"},
+				{ID: "probe-4", StaticURL: "https://example3.com"},
+			},
+		},
+		{
+			name: "all duplicates by URL",
+			probes: []api.Probe{
+				{ID: "probe-1", StaticURL: "https://example1.com"},
+				{ID: "probe-2", StaticURL: "https://example1.com"}, // Same URL
+				{ID: "probe-3", StaticURL: "https://example1.com"}, // Same URL
+			},
+			expected: []api.Probe{
+				{ID: "probe-1", StaticURL: "https://example1.com"},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := worker.deduplicateProbes(tt.probes)
+			
+			if len(result) != len(tt.expected) {
+				t.Errorf("deduplicateProbes() returned %d probes, expected %d", len(result), len(tt.expected))
+				return
+			}
+
+			for i, probe := range result {
+				if probe.ID != tt.expected[i].ID {
+					t.Errorf("deduplicateProbes()[%d].ID = %q, expected %q", i, probe.ID, tt.expected[i].ID)
+				}
+				if probe.StaticURL != tt.expected[i].StaticURL {
+					t.Errorf("deduplicateProbes()[%d].StaticURL = %q, expected %q", i, probe.StaticURL, tt.expected[i].StaticURL)
+				}
+			}
+		})
+	}
+}
+
+func TestWorker_MultipleAPIClients(t *testing.T) {
+	cfg := &Config{
+		PollingInterval: 30 * time.Second,
+		GracefulTimeout: 30 * time.Second,
+		APIBaseURLs:     []string{"https://api1.example.com", "https://api2.example.com", "https://api3.example.com"},
+		APITenant:       "test",
+		APIEndpoint:     "/api/metrics/v1",
+	}
+
+	worker := NewWorker(cfg)
+
+	// Verify that multiple API clients were created
+	if len(worker.apiClients) != 3 {
+		t.Errorf("NewWorker() created %d API clients, expected 3", len(worker.apiClients))
+	}
+
+	// Test with empty API URLs
+	cfgEmpty := &Config{
+		PollingInterval: 30 * time.Second,
+		GracefulTimeout: 30 * time.Second,
+		APIBaseURLs:     []string{},
+	}
+
+	workerEmpty := NewWorker(cfgEmpty)
+	if len(workerEmpty.apiClients) != 0 {
+		t.Errorf("NewWorker() with empty URLs created %d API clients, expected 0", len(workerEmpty.apiClients))
+	}
+
+	// Test with nil config
+	workerNil := NewWorker(nil)
+	if len(workerNil.apiClients) != 0 {
+		t.Errorf("NewWorker() with nil config created %d API clients, expected 0", len(workerNil.apiClients))
+	}
+}
+
+func TestWorker_fetchProbeList_NoAPIClients(t *testing.T) {
+	cfg := &Config{
+		PollingInterval: 30 * time.Second,
+		GracefulTimeout: 30 * time.Second,
+		APIBaseURLs:     []string{}, // No API URLs
+	}
+
+	worker := NewWorker(cfg)
+	ctx := context.Background()
+
+	probes, err := worker.fetchProbeList(ctx)
+	if err != nil {
+		t.Errorf("fetchProbeList() should not fail when no API clients are configured, got error: %v", err)
+	}
+
+	if probes == nil {
+		t.Error("fetchProbeList() should return empty slice, not nil")
+	}
+
+	if len(probes) != 0 {
+		t.Errorf("fetchProbeList() should return empty slice when no API clients configured, got %d probes", len(probes))
+	}
+}
+
+func TestWorker_updateProbeStatus_MultipleClients(t *testing.T) {
+	// Create mock servers to simulate multiple API endpoints
+	successServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "PATCH" {
+			w.WriteHeader(http.StatusOK)
+		} else {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+		}
+	}))
+	defer successServer.Close()
+
+	failureServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer failureServer.Close()
+
+	cfg := &Config{
+		PollingInterval: 30 * time.Second,
+		GracefulTimeout: 30 * time.Second,
+		APIBaseURLs:     []string{successServer.URL, failureServer.URL, successServer.URL},
+		APITenant:       "test",
+		APIEndpoint:     "/api/metrics/v1",
+	}
+
+	worker := NewWorker(cfg)
+
+	// Test updateProbeStatus with mixed success/failure
+	// This function doesn't return an error, but logs the results
+	// We're testing that it doesn't panic and handles the mixed responses
+	worker.updateProbeStatus("test-probe", "active")
+
+	// Test with no API clients
+	workerNoClients := &Worker{
+		config:     cfg,
+		apiClients: []*api.Client{},
+	}
+	workerNoClients.updateProbeStatus("test-probe", "active")
+}
+
+func TestNewWorker_EdgeCases(t *testing.T) {
+	// Test with config containing empty URL in the slice
+	cfg := &Config{
+		PollingInterval: 30 * time.Second,
+		GracefulTimeout: 30 * time.Second,
+		APIBaseURLs:     []string{"https://api1.example.com", "", "https://api3.example.com"},
+		APITenant:       "test",
+		APIEndpoint:     "/api/metrics/v1",
+	}
+
+	worker := NewWorker(cfg)
+	
+	// Should only create clients for non-empty URLs
+	if len(worker.apiClients) != 2 {
+		t.Errorf("NewWorker() created %d API clients, expected 2 (empty URL should be skipped)", len(worker.apiClients))
+	}
+
+	// Test with default namespace when not specified
+	cfgNoNamespace := &Config{
+		PollingInterval: 30 * time.Second,
+		GracefulTimeout: 30 * time.Second,
+		APIBaseURLs:     []string{"https://api.example.com"},
+		Namespace:       "", // Empty namespace
+	}
+
+	workerDefault := NewWorker(cfgNoNamespace)
+	if workerDefault.probeManager == nil {
+		t.Error("NewWorker() should create probe manager even with empty namespace")
 	}
 }
