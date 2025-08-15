@@ -5,7 +5,7 @@ go 1.24.1
 require (
 	github.com/coreos/prometheus-operator v0.41.1
 	github.com/oklog/run v1.2.0
-	github.com/rhobs/rhobs-synthetics-api v0.0.0-00010101000000-000000000000
+	github.com/rhobs/rhobs-synthetics-api v0.0.0-20250815182719-cd9526f7efa2
 	github.com/spf13/cobra v1.9.1
 	github.com/spf13/viper v1.20.1
 	k8s.io/apimachinery v0.33.3
