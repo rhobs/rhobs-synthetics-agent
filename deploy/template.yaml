@@ -1,0 +1,291 @@
+apiVersion: template.openshift.io/v1
+kind: Template
+metadata:
+  name: rhobs-synthetics-agent
+  annotations:
+    description: "RHOBS Synthetics Agent - synthetic monitoring agent for Red Hat Observability Service"
+    tags: "monitoring,synthetics,rhobs,observability"
+    iconClass: "icon-other-unknown"
+    openshift.io/display-name: "RHOBS Synthetics Agent"
+    openshift.io/documentation-url: "https://github.com/redhat-observability/rhobs-synthetics-agent"
+    openshift.io/support-url: "https://github.com/redhat-observability/rhobs-synthetics-agent/issues"
+    openshift.io/provider-display-name: "Red Hat"
+labels:
+  app: rhobs-synthetics-agent
+  template: rhobs-synthetics-agent
+objects:
+- apiVersion: v1
+  kind: ServiceAccount
+  metadata:
+    name: ${APPLICATION_NAME}
+    labels:
+      app.kubernetes.io/name: ${APPLICATION_NAME}
+      app.kubernetes.io/component: synthetics-agent
+      app.kubernetes.io/part-of: rhobs
+      app.kubernetes.io/managed-by: openshift-template
+- apiVersion: rbac.authorization.k8s.io/v1
+  kind: ClusterRole
+  metadata:
+    name: ${APPLICATION_NAME}
+    labels:
+      app.kubernetes.io/name: ${APPLICATION_NAME}
+      app.kubernetes.io/component: synthetics-agent
+      app.kubernetes.io/part-of: rhobs
+      app.kubernetes.io/managed-by: openshift-template
+  rules:
+    # Access to Probe CRDs (monitoring.rhobs/v1)
+    - apiGroups: ["monitoring.rhobs"]
+      resources: ["probes"]
+      verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+    # Access to Probe CRDs (monitoring.coreos.com/v1) - alternative API group
+    - apiGroups: ["monitoring.coreos.com"]
+      resources: ["probes"]
+      verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+    # Access to read existing CRDs to detect which API group is available
+    - apiGroups: ["apiextensions.k8s.io"]
+      resources: ["customresourcedefinitions"]
+      verbs: ["get", "list"]
+    # Access to read namespaces
+    - apiGroups: [""]
+      resources: ["namespaces"]
+      verbs: ["get", "list"]
+- apiVersion: rbac.authorization.k8s.io/v1
+  kind: ClusterRoleBinding
+  metadata:
+    name: ${APPLICATION_NAME}
+    labels:
+      app.kubernetes.io/name: ${APPLICATION_NAME}
+      app.kubernetes.io/component: synthetics-agent
+      app.kubernetes.io/part-of: rhobs
+      app.kubernetes.io/managed-by: openshift-template
+  roleRef:
+    apiGroup: rbac.authorization.k8s.io
+    kind: ClusterRole
+    name: ${APPLICATION_NAME}
+  subjects:
+    - kind: ServiceAccount
+      name: ${APPLICATION_NAME}
+      namespace: ${NAMESPACE}
+- apiVersion: v1
+  kind: ConfigMap
+  metadata:
+    name: ${APPLICATION_NAME}-config
+    labels:
+      app.kubernetes.io/name: ${APPLICATION_NAME}
+      app.kubernetes.io/component: synthetics-agent
+      app.kubernetes.io/part-of: rhobs
+      app.kubernetes.io/managed-by: openshift-template
+  data:
+    config.yaml: |
+      # Logging configuration
+      log_level: ${LOG_LEVEL}
+      log_format: ${LOG_FORMAT}
+
+      # Polling configuration
+      polling_interval: ${POLLING_INTERVAL}
+      graceful_timeout: ${GRACEFUL_TIMEOUT}
+
+      # API Configuration
+      api_base_urls:${API_BASE_URLS}
+      api_tenant: ${API_TENANT}
+      label_selector: ${LABEL_SELECTOR}
+
+      # Kubernetes Configuration
+      namespace: ${PROBE_NAMESPACE}
+
+      # Blackbox Configuration
+      blackbox:
+        interval: ${BLACKBOX_INTERVAL}
+        module: ${BLACKBOX_MODULE}
+        prober_url: ${BLACKBOX_PROBER_URL}
+- apiVersion: apps/v1
+  kind: Deployment
+  metadata:
+    name: ${APPLICATION_NAME}
+    labels:
+      app.kubernetes.io/name: ${APPLICATION_NAME}
+      app.kubernetes.io/component: synthetics-agent
+      app.kubernetes.io/part-of: rhobs
+      app.kubernetes.io/managed-by: openshift-template
+  spec:
+    replicas: ${{REPLICA_COUNT}}
+    strategy:
+      type: RollingUpdate
+      rollingUpdate:
+        maxSurge: 1
+        maxUnavailable: 0
+    selector:
+      matchLabels:
+        app.kubernetes.io/name: ${APPLICATION_NAME}
+        deployment: ${APPLICATION_NAME}
+    template:
+      metadata:
+        labels:
+          app.kubernetes.io/name: ${APPLICATION_NAME}
+          app.kubernetes.io/component: synthetics-agent
+          app.kubernetes.io/part-of: rhobs
+          deployment: ${APPLICATION_NAME}
+      spec:
+        serviceAccountName: ${APPLICATION_NAME}
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1001
+          runAsGroup: 1001
+          fsGroup: 1001
+        containers:
+          - name: synthetics-agent
+            image: ${IMAGE_REGISTRY}/${IMAGE_NAMESPACE}/${IMAGE_NAME}:${IMAGE_TAG}
+            imagePullPolicy: ${IMAGE_PULL_POLICY}
+            command:
+              - ./rhobs-synthetics-agent
+            args:
+              - start
+              - --config
+              - /etc/config/config.yaml
+            ports:
+              - name: http
+                containerPort: 8080
+                protocol: TCP
+            env:
+              - name: NAMESPACE
+                valueFrom:
+                  fieldRef:
+                    fieldPath: metadata.namespace
+            resources:
+              limits:
+                cpu: ${CPU_LIMIT}
+                memory: ${MEMORY_LIMIT}
+              requests:
+                cpu: ${CPU_REQUEST}
+                memory: ${MEMORY_REQUEST}
+            securityContext:
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop:
+                  - ALL
+              readOnlyRootFilesystem: false
+            volumeMounts:
+              - name: config
+                mountPath: /etc/config
+                readOnly: true
+        volumes:
+          - name: config
+            configMap:
+              name: ${APPLICATION_NAME}-config
+parameters:
+- name: APPLICATION_NAME
+  displayName: Application Name
+  description: The name assigned to all objects and the related imagestream.
+  value: rhobs-synthetics-agent
+  required: true
+- name: NAMESPACE
+  displayName: Namespace
+  description: The OpenShift Namespace where the ImageStream resides.
+  value: openshift-monitoring
+  required: true
+- name: IMAGE_REGISTRY
+  displayName: Image Registry
+  description: Container image registry
+  value: quay.io
+  required: true
+- name: IMAGE_NAMESPACE
+  displayName: Image Namespace
+  description: Namespace/organization in the image registry
+  value: rhobs
+  required: true
+- name: IMAGE_NAME
+  displayName: Image Name
+  description: Container image name
+  value: rhobs-synthetics-agent
+  required: true
+- name: IMAGE_TAG
+  displayName: Image Tag
+  description: Container image tag
+  value: latest
+  required: true
+- name: IMAGE_PULL_POLICY
+  displayName: Image Pull Policy
+  description: Image pull policy for the container image
+  value: Always
+  required: true
+- name: REPLICA_COUNT
+  displayName: Replica Count
+  description: Number of replicas to deploy
+  value: "1"
+  required: true
+- name: CPU_REQUEST
+  displayName: CPU Request
+  description: Minimum amount of CPU the container needs
+  value: 100m
+  required: true
+- name: CPU_LIMIT
+  displayName: CPU Limit
+  description: Maximum amount of CPU the container can use
+  value: 500m
+  required: true
+- name: MEMORY_REQUEST
+  displayName: Memory Request
+  description: Minimum amount of memory the container needs
+  value: 128Mi
+  required: true
+- name: MEMORY_LIMIT
+  displayName: Memory Limit
+  description: Maximum amount of memory the container can use
+  value: 512Mi
+  required: true
+- name: LOG_LEVEL
+  displayName: Log Level
+  description: Application log level (debug, info, warn, error)
+  value: info
+  required: true
+- name: LOG_FORMAT
+  displayName: Log Format
+  description: Application log format (json, text)
+  value: json
+  required: true
+- name: POLLING_INTERVAL
+  displayName: Polling Interval
+  description: How often to poll APIs for probe configurations
+  value: 30s
+  required: true
+- name: GRACEFUL_TIMEOUT
+  displayName: Graceful Timeout
+  description: Graceful shutdown timeout
+  value: 30s
+  required: true
+- name: API_BASE_URLS
+  displayName: API Base URLs
+  description: YAML list of API URLs to poll (including leading newlines and spaces)
+  value: |2+
+        - "https://observatorium-api.example.com"
+  required: true
+- name: API_TENANT
+  displayName: API Tenant
+  description: API tenant identifier
+  value: default
+  required: true
+- name: LABEL_SELECTOR
+  displayName: Label Selector
+  description: Label selector for filtering probes
+  value: private=false,rhobs-synthetics/status=pending
+  required: true
+- name: PROBE_NAMESPACE
+  displayName: Probe Namespace
+  description: Kubernetes namespace where probe resources will be created
+  value: openshift-monitoring
+  required: true
+- name: BLACKBOX_INTERVAL
+  displayName: Blackbox Interval
+  description: Blackbox probe interval
+  value: 30s
+  required: true
+- name: BLACKBOX_MODULE
+  displayName: Blackbox Module
+  description: Blackbox exporter module to use
+  value: http_2xx
+  required: true
+- name: BLACKBOX_PROBER_URL
+  displayName: Blackbox Prober URL
+  description: URL of the blackbox exporter prober
+  value: http://blackbox-exporter:9115
+  required: true
