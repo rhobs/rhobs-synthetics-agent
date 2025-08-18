@@ -55,6 +55,10 @@ func main() {
 	startCmd.Flags().String("graceful-timeout", "30s", "Graceful shutdown timeout")
 	startCmd.Flags().String("kubeconfig", "", "Path to kubeconfig file (optional, for out-of-cluster development)")
 	startCmd.Flags().String("namespace", "default", "The Kubernetes namespace for probe resources")
+	
+	// API Config flags
+	startCmd.Flags().StringSlice("api-base-urls", []string{}, "Comma-separated list of base URLs for observatorium APIs")
+	startCmd.Flags().String("api-tenant", "default", "API tenant identifier")
 
 	// Bind flags to viper
 	_ = viper.BindPFlag("config", startCmd.Flags().Lookup("config"))
@@ -63,6 +67,8 @@ func main() {
 	_ = viper.BindPFlag("graceful_timeout", startCmd.Flags().Lookup("graceful-timeout"))
 	_ = viper.BindPFlag("kube_config", startCmd.Flags().Lookup("kubeconfig"))
 	_ = viper.BindPFlag("namespace", startCmd.Flags().Lookup("namespace"))
+	_ = viper.BindPFlag("api_base_urls", startCmd.Flags().Lookup("api-base-urls"))
+	_ = viper.BindPFlag("api_tenant", startCmd.Flags().Lookup("api-tenant"))
 
 	// Add commands to the root command
 	rootCmd.AddCommand(startCmd)

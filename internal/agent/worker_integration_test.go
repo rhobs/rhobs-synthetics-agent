@@ -20,7 +20,7 @@ func TestWorker_processProbe_Success(t *testing.T) {
 	defer validationServer.Close()
 
 	cfg := &Config{
-		APIBaseURL:    "http://example.com",
+		APIBaseURLs:    []string{"http://example.com"},
 		APITenant:     "test",
 		APIEndpoint:   "/api/metrics/v1",
 		LabelSelector: "test=true",
@@ -54,7 +54,7 @@ func TestWorker_processProbe_Success(t *testing.T) {
 
 func TestWorker_processProbe_ValidationFailure(t *testing.T) {
 	cfg := &Config{
-		APIBaseURL:    "http://example.com",
+		APIBaseURLs:    []string{"http://example.com"},
 		APITenant:     "test",
 		APIEndpoint:   "/api/metrics/v1",
 		LabelSelector: "test=true",
@@ -126,7 +126,7 @@ func TestWorker_FullIntegration(t *testing.T) {
 	cfg := &Config{
 		PollingInterval: 100 * time.Millisecond,
 		GracefulTimeout: 1 * time.Second,
-		APIBaseURL:      apiServer.URL,
+		APIBaseURLs:      []string{apiServer.URL},
 		APITenant:       "test",
 		APIEndpoint:     "/api/metrics/v1",
 		LabelSelector:   "test=true",
@@ -189,7 +189,7 @@ func TestWorker_processProbes_WithValidConfig(t *testing.T) {
 	defer apiServer.Close()
 
 	cfg := &Config{
-		APIBaseURL:    apiServer.URL,
+		APIBaseURLs:    []string{apiServer.URL},
 		APITenant:     "test",
 		APIEndpoint:   "/api/metrics/v1",
 		LabelSelector: "test=true",
