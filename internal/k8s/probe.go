@@ -3,13 +3,13 @@ package k8s
 import (
 	"context"
 	"fmt"
-	"log"
 	"net/http"
 	"net/url"
 	"time"
 
 	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/rhobs/rhobs-synthetics-agent/internal/api"
+	"github.com/rhobs/rhobs-synthetics-agent/internal/logger"
 	"github.com/rhobs/rhobs-synthetics-api/pkg/kubeclient"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -97,7 +97,7 @@ func (pm *ProbeManager) initializeK8sClients() {
 
 	client, err := kubeclient.NewClient(cfg)
 	if err != nil {
-		log.Printf("Failed to create Kubernetes client: %v", err)
+		logger.Errorf("Failed to create Kubernetes client: %v", err)
 		pm.isK8sCluster = false
 		return
 	}
@@ -128,7 +128,7 @@ func (pm *ProbeManager) checkProbeCRDs() {
 			for _, resource := range apiList.APIResources {
 				if resource.Kind == "Probe" {
 					pm.probeAPIGroup = "monitoring.rhobs"
-					log.Printf("Using monitoring.rhobs/v1 for Probe resources")
+					logger.Infof("Using monitoring.rhobs/v1 for Probe resources")
 					return
 				}
 			}
@@ -140,14 +140,14 @@ func (pm *ProbeManager) checkProbeCRDs() {
 			for _, resource := range apiList.APIResources {
 				if resource.Kind == "Probe" {
 					pm.probeAPIGroup = "monitoring.coreos.com"
-					log.Printf("Using monitoring.coreos.com/v1 for Probe resources")
+					logger.Infof("Using monitoring.coreos.com/v1 for Probe resources")
 					return
 				}
 			}
 		}
 	}
 
-	log.Printf("No compatible Probe CRDs found in cluster")
+	logger.Errorf("No compatible Probe CRDs found in cluster")
 }
 
 // CreateProbeK8sResource creates and applies a Probe Custom Resource to Kubernetes
