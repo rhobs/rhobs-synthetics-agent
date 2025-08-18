@@ -164,6 +164,45 @@ objects:
           - name: config
             configMap:
               name: ${APPLICATION_NAME}-config
+- apiVersion: v1
+  kind: Service
+  metadata:
+    name: ${APPLICATION_NAME}
+    namespace: ${NAMESPACE}
+    labels:
+      app.kubernetes.io/name: ${APPLICATION_NAME}
+      app.kubernetes.io/component: synthetics-agent
+      app.kubernetes.io/part-of: rhobs
+      app.kubernetes.io/managed-by: openshift-template
+  spec:
+    ports:
+      - name: http-metrics
+        port: 8080
+        targetPort: http
+        protocol: TCP
+    selector:
+      app.kubernetes.io/name: ${APPLICATION_NAME}
+      deployment: ${APPLICATION_NAME}
+- apiVersion: monitoring.coreos.com/v1
+  kind: ServiceMonitor
+  metadata:
+    name: ${APPLICATION_NAME}
+    namespace: ${NAMESPACE}
+    labels:
+      app.kubernetes.io/name: ${APPLICATION_NAME}
+      app.kubernetes.io/component: synthetics-agent
+      app.kubernetes.io/part-of: rhobs
+      app.kubernetes.io/managed-by: openshift-template
+  spec:
+    selector:
+      matchLabels:
+        app.kubernetes.io/name: ${APPLICATION_NAME}
+        app.kubernetes.io/component: synthetics-agent
+    endpoints:
+      - port: http-metrics
+        path: /metrics
+        interval: 30s
+        scrapeTimeout: 10s
 parameters:
 - name: APPLICATION_NAME
   displayName: Application Name
