@@ -3,7 +3,6 @@ package agent
 import (
 	"context"
 	"io"
-	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -12,6 +11,7 @@ import (
 	"time"
 
 	"github.com/oklog/run"
+	"github.com/rhobs/rhobs-synthetics-agent/internal/logger"
 )
 
 // ResourceManager handles cleanup of resources like connections and file handles
@@ -49,7 +49,7 @@ func (rm *ResourceManager) Cleanup() {
 	rm.mu.Lock()
 	defer rm.mu.Unlock()
 
-	log.Printf("Cleaning up resources...")
+	logger.Infof("Cleaning up resources...")
 
 	// Close HTTP client transport
 	if transport, ok := rm.httpClient.Transport.(*http.Transport); ok {
@@ -60,7 +60,7 @@ func (rm *ResourceManager) Cleanup() {
 	for i, file := range rm.openFiles {
 		if file != nil {
 			if err := file.Close(); err != nil {
-				log.Printf("Error closing file handle %d: %v", i, err)
+				logger.Errorf("Error closing file handle %d: %v", i, err)
 			}
 		}
 	}
@@ -69,12 +69,12 @@ func (rm *ResourceManager) Cleanup() {
 	for i, conn := range rm.connections {
 		if conn != nil {
 			if err := conn.Close(); err != nil {
-				log.Printf("Error closing connection %d: %v", i, err)
+				logger.Errorf("Error closing connection %d: %v", i, err)
 			}
 		}
 	}
 
-	log.Printf("Resource cleanup completed")
+	logger.Infof("Resource cleanup completed")
 }
 
 type Agent struct {
@@ -109,10 +109,10 @@ func (a *Agent) Run() error {
 		sig := make(chan os.Signal, 1)
 		g.Add(func() error {
 			signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
-			
+
 			select {
 			case receivedSig := <-sig:
-				log.Printf("Received signal %v, initiating graceful shutdown...", receivedSig)
+				logger.Infof("Received signal %v, initiating graceful shutdown...", receivedSig)
 				a.shutdownOnce.Do(func() {
 					close(a.shutdownChan)
 				})
@@ -121,7 +121,7 @@ func (a *Agent) Run() error {
 			}
 
 			// Wait for active tasks to complete with timeout
-			log.Printf("Waiting for active tasks to complete (timeout: %v)...", a.config.GracefulTimeout)
+			logger.Infof("Waiting for active tasks to complete (timeout: %v)...", a.config.GracefulTimeout)
 			done := make(chan struct{})
 			go func() {
 				a.taskWG.Wait()
@@ -130,9 +130,9 @@ func (a *Agent) Run() error {
 
 			select {
 			case <-done:
-				log.Printf("All active tasks completed gracefully")
+				logger.Info("All active tasks completed gracefully")
 			case <-time.After(a.config.GracefulTimeout):
-				log.Printf("Graceful shutdown timeout exceeded, forcing shutdown")
+				logger.Info("Graceful shutdown timeout exceeded, forcing shutdown")
 			}
 
 			return nil
@@ -148,7 +148,7 @@ func (a *Agent) Run() error {
 		g.Add(func() error {
 			return a.worker.Start(ctx, a.resourceManager, &a.taskWG, a.shutdownChan)
 		}, func(error) {
-			log.Println("shutting down worker")
+			logger.Info("shutting down worker")
 			cancel()
 		})
 	}
@@ -163,21 +163,21 @@ func (a *Agent) Run() error {
 		})
 	}
 
-	log.Printf("RHOBS Synthetic Agent started with config: %s", a.config)
+	logger.Infof("RHOBS Synthetic Agent started with config: %s", a.config)
 
 	if err := g.Run(); err != nil {
-		log.Println("RHOBS Synthetic Agent stopped")
+		logger.Info("RHOBS Synthetic Agent stopped")
 		return err
 	}
 
-	log.Println("RHOBS Synthetic Agent shutdown complete")
+	logger.Info("RHOBS Synthetic Agent shutdown complete")
 	return nil
 }
 
 // Shutdown gracefully shuts down the agent (useful for testing)
 func (a *Agent) Shutdown() {
 	a.shutdownOnce.Do(func() {
-		log.Printf("Programmatic shutdown initiated")
+		logger.Infof("Programmatic shutdown initiated")
 		close(a.shutdownChan)
 	})
 }

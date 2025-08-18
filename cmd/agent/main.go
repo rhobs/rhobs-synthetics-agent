@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/rhobs/rhobs-synthetics-agent/internal/agent"
+	"github.com/rhobs/rhobs-synthetics-agent/internal/logger"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -43,6 +44,9 @@ func main() {
 				return fmt.Errorf("failed to load config: %w", err)
 			}
 
+			// Reinitialize logger with viper configuration to catch the log level flag
+			logger.ReinitLogger()
+
 			agent := agent.New(cfg)
 			return agent.Run()
 		},
@@ -75,6 +79,6 @@ func main() {
 
 	// Execute the root command. This parses the arguments and calls the appropriate command's Run function.
 	if err := rootCmd.Execute(); err != nil {
-		log.Fatalf("Error: %v", err)
+		logger.Fatalf("Error: %v", err)
 	}
 }

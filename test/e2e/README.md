@@ -239,7 +239,7 @@ You can add debugging to the mock server by modifying `mock_api_server.go` to lo
 
 ```go
 func (m *MockAPIServer) handleProbes(w http.ResponseWriter, r *http.Request) {
-    log.Printf("Mock API received request: %s %s", r.Method, r.URL.String())
+    logger.Infof("Mock API received request: %s %s", r.Method, r.URL.String())
     // ... rest of handler
 }
 ```
