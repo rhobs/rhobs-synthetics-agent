@@ -18,6 +18,7 @@ objects:
   kind: ServiceAccount
   metadata:
     name: ${APPLICATION_NAME}
+    namespace: ${NAMESPACE}
     labels:
       app.kubernetes.io/name: ${APPLICATION_NAME}
       app.kubernetes.io/component: synthetics-agent
@@ -70,6 +71,7 @@ objects:
   kind: ConfigMap
   metadata:
     name: ${APPLICATION_NAME}-config
+    namespace: ${NAMESPACE}
     labels:
       app.kubernetes.io/name: ${APPLICATION_NAME}
       app.kubernetes.io/component: synthetics-agent
@@ -102,6 +104,7 @@ objects:
   kind: Deployment
   metadata:
     name: ${APPLICATION_NAME}
+    namespace: ${NAMESPACE}
     labels:
       app.kubernetes.io/name: ${APPLICATION_NAME}
       app.kubernetes.io/component: synthetics-agent
@@ -127,11 +130,6 @@ objects:
           deployment: ${APPLICATION_NAME}
       spec:
         serviceAccountName: ${APPLICATION_NAME}
-        securityContext:
-          runAsNonRoot: true
-          runAsUser: 1001
-          runAsGroup: 1001
-          fsGroup: 1001
         containers:
           - name: synthetics-agent
             image: ${IMAGE_REGISTRY}/${IMAGE_NAMESPACE}/${IMAGE_NAME}:${IMAGE_TAG}
@@ -158,12 +156,6 @@ objects:
               requests:
                 cpu: ${CPU_REQUEST}
                 memory: ${MEMORY_REQUEST}
-            securityContext:
-              allowPrivilegeEscalation: false
-              capabilities:
-                drop:
-                  - ALL
-              readOnlyRootFilesystem: false
             volumeMounts:
               - name: config
                 mountPath: /etc/config
@@ -180,7 +172,7 @@ parameters:
   required: true
 - name: NAMESPACE
   displayName: Namespace
-  description: The OpenShift Namespace where the ImageStream resides.
+  description: The OpenShift Namespace where the agent will be deployed.
   value: openshift-monitoring
   required: true
 - name: IMAGE_REGISTRY
