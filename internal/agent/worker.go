@@ -9,8 +9,8 @@ import (
 
 	"github.com/rhobs/rhobs-synthetics-agent/internal/api"
 	"github.com/rhobs/rhobs-synthetics-agent/internal/k8s"
-
 	"github.com/rhobs/rhobs-synthetics-agent/internal/logger"
+	"github.com/rhobs/rhobs-synthetics-agent/internal/metrics"
 )
 
 type Worker struct {
@@ -102,10 +102,18 @@ func (w *Worker) processProbes(ctx context.Context, resourceMgr *ResourceManager
 	}
 
 	logger.Info("Starting probe reconciliation cycle")
+	reconciliationStart := time.Now()
+	var reconciliationErr error
 
 	// Add task to wait group for graceful shutdown tracking
 	taskWG.Add(1)
-	defer taskWG.Done()
+	defer func() {
+		taskWG.Done()
+		// Record reconciliation metrics
+		duration := time.Since(reconciliationStart)
+		success := reconciliationErr == nil
+		metrics.RecordReconciliation(duration, success)
+	}()
 
 	if len(w.apiClients) == 0 {
 		logger.Info("No API URLs configured, continuing to run in standalone mode (no probe processing)")
@@ -115,7 +123,8 @@ func (w *Worker) processProbes(ctx context.Context, resourceMgr *ResourceManager
 	// Fetch probe configurations from the API
 	probes, err := w.fetchProbeList(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to fetch probe list: %w", err)
+		reconciliationErr = fmt.Errorf("failed to fetch probe list: %w", err)
+		return reconciliationErr
 	}
 
 	if len(probes) == 0 {
@@ -138,10 +147,14 @@ func (w *Worker) processProbes(ctx context.Context, resourceMgr *ResourceManager
 			logger.Infof("Failed to process probe %s: %v", probe.ID, err)
 			// Update probe status to failed
 			w.updateProbeStatus(probe.ID, "failed")
+			// Record failed probe resource operation
+			metrics.RecordProbeResourceOperation("create", false)
 		} else {
 			logger.Infof("Successfully processed probe %s", probe.ID)
 			// Update probe status to active
 			w.updateProbeStatus(probe.ID, "active")
+			// Record successful probe resource operation
+			metrics.RecordProbeResourceOperation("create", true)
 		}
 	}
 
@@ -168,14 +181,20 @@ func (w *Worker) fetchProbeList(ctx context.Context) ([]api.Probe, error) {
 	for i, apiClient := range w.apiClients {
 		logger.Infof("Fetching probes from API endpoint %d/%d", i+1, len(w.apiClients))
 
+		fetchStart := time.Now()
 		probes, err := apiClient.GetProbes(labelSelector)
+		fetchDuration := time.Since(fetchStart)
+		
+		apiEndpoint := fmt.Sprintf("endpoint_%d", i+1)
 		if err != nil {
 			logger.Infof("Failed to fetch probes from API endpoint %d: %v", i+1, err)
 			errors = append(errors, fmt.Errorf("API endpoint %d: %w", i+1, err))
+			metrics.RecordProbeListFetch(apiEndpoint, fetchDuration, false)
 			continue
 		}
 
 		logger.Infof("Successfully fetched %d probes from API endpoint %d", len(probes), i+1)
+		metrics.RecordProbeListFetch(apiEndpoint, fetchDuration, true)
 		allProbes = append(allProbes, probes...)
 	}
 

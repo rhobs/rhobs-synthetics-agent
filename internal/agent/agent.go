@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -12,6 +13,8 @@ import (
 
 	"github.com/oklog/run"
 	"github.com/rhobs/rhobs-synthetics-agent/internal/logger"
+	"github.com/rhobs/rhobs-synthetics-agent/internal/metrics"
+	"github.com/rhobs/rhobs-synthetics-agent/internal/version"
 )
 
 // ResourceManager handles cleanup of resources like connections and file handles
@@ -90,6 +93,13 @@ func New(cfg *Config) *Agent {
 	worker := NewWorker(cfg)
 	resourceManager := NewResourceManager()
 
+	// Initialize agent info metrics
+	namespace := "default"
+	if cfg != nil && cfg.Namespace != "" {
+		namespace = cfg.Namespace
+	}
+	metrics.SetAgentInfo(version.Version, namespace)
+
 	return &Agent{
 		config:          cfg,
 		worker:          worker,
@@ -153,11 +163,11 @@ func (a *Agent) Run() error {
 		})
 	}
 
-	// Health check server
+	// Metrics server
 	{
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
-			return a.startHealthServer(ctx)
+			return a.startMetricsServer(ctx)
 		}, func(error) {
 			cancel()
 		})
@@ -182,8 +192,28 @@ func (a *Agent) Shutdown() {
 	})
 }
 
-func (a *Agent) startHealthServer(ctx context.Context) error {
-	// TODO: Implement health check server
-	<-ctx.Done()
+func (a *Agent) startMetricsServer(ctx context.Context) error {
+	mux := http.NewServeMux()
+	mux.Handle("/metrics", metrics.Handler())
+	
+	server := &http.Server{
+		Addr:    ":8080",
+		Handler: mux,
+	}
+
+	go func() {
+		<-ctx.Done()
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := server.Shutdown(shutdownCtx); err != nil {
+			logger.Errorf("Metrics server shutdown error: %v", err)
+		}
+	}()
+
+	logger.Info("Starting metrics server on :8080/metrics")
+	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		return fmt.Errorf("metrics server failed: %w", err)
+	}
+	
 	return nil
 }

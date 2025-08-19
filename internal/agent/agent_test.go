@@ -304,12 +304,12 @@ func TestAgent_startHealthServer(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 
-	// startHealthServer should block until context is cancelled
-	err := agent.startHealthServer(ctx)
+	// startMetricsServer should block until context is cancelled
+	err := agent.startMetricsServer(ctx)
 
 	// Should return nil when context is cancelled
 	if err != nil {
-		t.Errorf("Expected startHealthServer to return nil, got: %v", err)
+		t.Errorf("Expected startMetricsServer to return nil, got: %v", err)
 	}
 }
 
