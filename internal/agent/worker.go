@@ -14,9 +14,10 @@ import (
 )
 
 type Worker struct {
-	config       *Config
-	apiClients   []*api.Client
-	probeManager *k8s.ProbeManager
+	config          *Config
+	apiClients      []*api.Client
+	probeManager    *k8s.ProbeManager
+	readinessCallback func(bool)
 }
 
 func NewWorker(cfg *Config) *Worker {
@@ -43,10 +44,16 @@ func NewWorker(cfg *Config) *Worker {
 	}
 
 	return &Worker{
-		config:       cfg,
-		apiClients:   apiClients,
-		probeManager: probeManager,
+		config:          cfg,
+		apiClients:      apiClients,
+		probeManager:    probeManager,
+		readinessCallback: func(bool) {}, // no-op by default
 	}
+}
+
+// SetReadinessCallback sets the callback function to signal readiness state changes
+func (w *Worker) SetReadinessCallback(callback func(bool)) {
+	w.readinessCallback = callback
 }
 
 func (w *Worker) Start(ctx context.Context, resourceMgr *ResourceManager, taskWG *sync.WaitGroup, shutdownChan chan struct{}) error {
@@ -55,6 +62,8 @@ func (w *Worker) Start(ctx context.Context, resourceMgr *ResourceManager, taskWG
 	if len(w.apiClients) == 0 {
 		logger.Info("Warning: No API URLs configured. Agent will run in standalone mode without probe processing.")
 		logger.Info("To enable probe processing, configure api_base_urls in your config file or set API_BASE_URLS environment variable.")
+		// Signal ready for standalone mode
+		w.readinessCallback(true)
 	} else {
 		logger.Infof("Configured %d API endpoint(s) for probe processing", len(w.apiClients))
 	}
@@ -65,6 +74,10 @@ func (w *Worker) Start(ctx context.Context, resourceMgr *ResourceManager, taskWG
 	// Initial run
 	if err := w.processProbes(ctx, resourceMgr, taskWG, shutdownChan); err != nil {
 		logger.Errorf("initial work failed: %v\n", err)
+		w.readinessCallback(false)
+	} else if len(w.apiClients) > 0 {
+		// Signal ready after successful initial API communication
+		w.readinessCallback(true)
 	}
 
 	for {

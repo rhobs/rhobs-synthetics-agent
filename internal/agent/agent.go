@@ -87,6 +87,8 @@ type Agent struct {
 	taskWG          sync.WaitGroup
 	shutdownChan    chan struct{}
 	shutdownOnce    sync.Once
+	ready           bool
+	readyMu         sync.RWMutex
 }
 
 func New(cfg *Config) *Agent {
@@ -100,12 +102,18 @@ func New(cfg *Config) *Agent {
 	}
 	metrics.SetAgentInfo(version.Version, namespace)
 
-	return &Agent{
+	agent := &Agent{
 		config:          cfg,
 		worker:          worker,
 		resourceManager: resourceManager,
 		shutdownChan:    make(chan struct{}),
+		ready:           false,
 	}
+
+	// Set readiness callback for the worker
+	worker.SetReadinessCallback(agent.setReady)
+
+	return agent
 }
 
 func (a *Agent) Run() error {
@@ -159,6 +167,7 @@ func (a *Agent) Run() error {
 			return a.worker.Start(ctx, a.resourceManager, &a.taskWG, a.shutdownChan)
 		}, func(error) {
 			logger.Info("shutting down worker")
+			a.setReady(false)
 			cancel()
 		})
 	}
@@ -195,6 +204,8 @@ func (a *Agent) Shutdown() {
 func (a *Agent) startMetricsServer(ctx context.Context) error {
 	mux := http.NewServeMux()
 	mux.Handle("/metrics", metrics.Handler())
+	mux.HandleFunc("/livez", a.handleLiveness)
+	mux.HandleFunc("/readyz", a.handleReadiness)
 	
 	server := &http.Server{
 		Addr:    ":8080",
@@ -210,10 +221,52 @@ func (a *Agent) startMetricsServer(ctx context.Context) error {
 		}
 	}()
 
-	logger.Info("Starting metrics server on :8080/metrics")
+	logger.Info("Starting metrics server on :8080 with /metrics, /livez, and /readyz endpoints")
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		return fmt.Errorf("metrics server failed: %w", err)
 	}
 	
 	return nil
+}
+
+// setReady sets the agent readiness state
+func (a *Agent) setReady(ready bool) {
+	a.readyMu.Lock()
+	defer a.readyMu.Unlock()
+	a.ready = ready
+}
+
+// isReady returns the current readiness state
+func (a *Agent) isReady() bool {
+	a.readyMu.RLock()
+	defer a.readyMu.RUnlock()
+	return a.ready
+}
+
+// handleLiveness implements the liveness endpoint
+// Returns 200 OK as long as the process is running and responsive
+func (a *Agent) handleLiveness(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(http.StatusOK)
+	if _, err := w.Write([]byte("OK")); err != nil {
+		logger.Errorf("Failed to write liveness response: %v", err)
+	}
+}
+
+// handleReadiness implements the readiness endpoint
+// Returns 200 OK only when the agent is initialized and ready to perform its duties
+func (a *Agent) handleReadiness(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/plain")
+	
+	if a.isReady() {
+		w.WriteHeader(http.StatusOK)
+		if _, err := w.Write([]byte("Ready")); err != nil {
+			logger.Errorf("Failed to write readiness response: %v", err)
+		}
+	} else {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		if _, err := w.Write([]byte("Not Ready")); err != nil {
+			logger.Errorf("Failed to write readiness response: %v", err)
+		}
+	}
 }
