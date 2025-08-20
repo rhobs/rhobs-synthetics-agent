@@ -25,6 +25,12 @@ type ResourceManager struct {
 	mu          sync.Mutex
 }
 
+type ResourceType string
+const (
+	ResourceTypeFile       = "file"
+	ResourceTypeConnection = "connection"
+)
+
 // NewResourceManager creates a new resource manager
 func NewResourceManager() *ResourceManager {
 	return &ResourceManager{
@@ -35,14 +41,14 @@ func NewResourceManager() *ResourceManager {
 }
 
 // AddResource adds a resource to be tracked and cleaned up
-func (rm *ResourceManager) AddResource(resource io.Closer, resourceType string) {
+func (rm *ResourceManager) AddResource(resource io.Closer, resourceType ResourceType) {
 	rm.mu.Lock()
 	defer rm.mu.Unlock()
 
 	switch resourceType {
-	case "file":
+	case ResourceTypeFile:
 		rm.openFiles = append(rm.openFiles, resource)
-	case "connection":
+	case ResourceTypeConnection:
 		rm.connections = append(rm.connections, resource)
 	}
 }
