@@ -60,7 +60,7 @@ func TestResourceManager_AddResource(t *testing.T) {
 	connCloser := &mockCloser{}
 
 	// Test adding file resource
-	rm.AddResource(fileCloser, "file")
+	rm.AddResource(fileCloser, ResourceTypeFile)
 	if len(rm.openFiles) != 1 {
 		t.Errorf("Expected 1 file resource, got %d", len(rm.openFiles))
 	}
@@ -69,7 +69,7 @@ func TestResourceManager_AddResource(t *testing.T) {
 	}
 
 	// Test adding connection resource
-	rm.AddResource(connCloser, "connection")
+	rm.AddResource(connCloser, ResourceTypeConnection)
 	if len(rm.openFiles) != 1 {
 		t.Errorf("Expected 1 file resource, got %d", len(rm.openFiles))
 	}
@@ -97,10 +97,10 @@ func TestResourceManager_Cleanup(t *testing.T) {
 	connCloser1 := &mockCloser{}
 	connCloser2 := &mockCloser{}
 
-	rm.AddResource(fileCloser1, "file")
-	rm.AddResource(fileCloser2, "file")
-	rm.AddResource(connCloser1, "connection")
-	rm.AddResource(connCloser2, "connection")
+	rm.AddResource(fileCloser1, ResourceTypeFile)
+	rm.AddResource(fileCloser2, ResourceTypeFile)
+	rm.AddResource(connCloser1, ResourceTypeConnection)
+	rm.AddResource(connCloser2, ResourceTypeConnection)
 
 	// Call cleanup
 	rm.Cleanup()
@@ -127,8 +127,8 @@ func TestResourceManager_Cleanup_WithErrors(t *testing.T) {
 	failingCloser := &mockCloser{err: io.ErrClosedPipe}
 	normalCloser := &mockCloser{}
 
-	rm.AddResource(failingCloser, "file")
-	rm.AddResource(normalCloser, "connection")
+	rm.AddResource(failingCloser, ResourceTypeFile)
+	rm.AddResource(normalCloser, ResourceTypeConnection)
 
 	// Cleanup should not panic even if some resources fail to close
 	rm.Cleanup()
@@ -165,7 +165,7 @@ func TestResourceManager_ConcurrentAccess(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			closer := &mockCloser{}
-			rm.AddResource(closer, "file")
+			rm.AddResource(closer, ResourceTypeFile)
 		}()
 	}
 
@@ -410,7 +410,7 @@ func BenchmarkResourceManager_AddResource(b *testing.B) {
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		rm.AddResource(closers[i], "file")
+		rm.AddResource(closers[i], ResourceTypeFile)
 	}
 }
 
@@ -420,7 +420,7 @@ func BenchmarkResourceManager_Cleanup(b *testing.B) {
 		rm := NewResourceManager()
 		// Add 100 resources
 		for j := 0; j < 100; j++ {
-			rm.AddResource(&mockCloser{}, "file")
+			rm.AddResource(&mockCloser{}, ResourceTypeFile)
 		}
 		b.StartTimer()
 

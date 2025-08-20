@@ -13,6 +13,8 @@ import (
 	"github.com/rhobs/rhobs-synthetics-agent/internal/metrics"
 )
 
+const defaultProbeNamespace = "default"
+
 type Worker struct {
 	config          *Config
 	apiClients      []*api.Client
@@ -22,8 +24,9 @@ type Worker struct {
 
 func NewWorker(cfg *Config) *Worker {
 	var apiClients []*api.Client
-	var probeManager *k8s.ProbeManager
 
+	namespace := defaultProbeNamespace
+	kubeConfigPath := ""
 	if cfg != nil {
 		// Create API clients for each configured URL
 		apiURLs := cfg.GetAPIBaseURLs()
@@ -34,14 +37,15 @@ func NewWorker(cfg *Config) *Worker {
 			}
 		}
 
-		namespace := cfg.Namespace
-		if namespace == "" {
-			namespace = "default"
+		if cfg.Namespace != "" {
+			namespace = cfg.Namespace
 		}
-		probeManager = k8s.NewProbeManager(namespace, cfg.KubeConfig)
-	} else {
-		probeManager = k8s.NewProbeManager("default", "")
+		if cfg.KubeConfig != "" {
+			kubeConfigPath = cfg.KubeConfig
+		}
 	}
+
+	probeManager := k8s.NewProbeManager(namespace, kubeConfigPath)
 
 	return &Worker{
 		config:          cfg,

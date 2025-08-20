@@ -34,4 +34,4 @@ go.work.sum
 # .vscode/
 
 test/e2e/data/
-agent
+rhobs-synthetics-agent

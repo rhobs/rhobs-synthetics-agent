@@ -26,25 +26,22 @@ type ProbeConfig struct {
 // ProbeManager handles the creation and management of probe Custom Resources
 type ProbeManager struct {
 	namespace      string
-	kubeconfigPath string
 	httpClient     *http.Client
 	kubeClient     *kubeclient.Client
-	isK8sCluster   bool
 	probeAPIGroup  string // "monitoring.rhobs" or "monitoring.coreos.com" or ""
 }
 
 // NewProbeManager creates a new probe manager
 func NewProbeManager(namespace, kubeconfigPath string) *ProbeManager {
 	pm := &ProbeManager{
-		namespace:      namespace,
-		kubeconfigPath: kubeconfigPath,
+		namespace:  namespace,
 		httpClient: &http.Client{
 			Timeout: 10 * time.Second,
 		},
 	}
 
 	// Initialize Kubernetes clients and check cluster capabilities
-	pm.initializeK8sClients()
+	pm.initializeK8sClients(kubeconfigPath)
 	return pm
 }
 
@@ -83,30 +80,31 @@ func (pm *ProbeManager) ValidateURL(targetURL string) error {
 }
 
 // initializeK8sClients sets up Kubernetes clients and checks cluster capabilities
-func (pm *ProbeManager) initializeK8sClients() {
+func (pm *ProbeManager) initializeK8sClients(kubeconfigPath string) {
 	// Check if running in a Kubernetes cluster
 	if !kubeclient.IsRunningInK8sCluster() {
-		pm.isK8sCluster = false
 		return
 	}
 
 	// Create Kubernetes client
 	cfg := kubeclient.Config{
-		KubeconfigPath: pm.kubeconfigPath,
+		KubeconfigPath: kubeconfigPath,
 	}
 
 	client, err := kubeclient.NewClient(cfg)
 	if err != nil {
 		logger.Errorf("Failed to create Kubernetes client: %v", err)
-		pm.isK8sCluster = false
 		return
 	}
 
 	pm.kubeClient = client
-	pm.isK8sCluster = true
 
 	// Check if Probe CRD exists
 	pm.checkProbeCRDs()
+}
+
+func (pm *ProbeManager) isK8sCluster() bool {
+	return pm.kubeClient != nil
 }
 
 // checkProbeCRDs checks if Probe CRDs exist in the cluster
@@ -153,7 +151,7 @@ func (pm *ProbeManager) checkProbeCRDs() {
 // CreateProbeK8sResource creates and applies a Probe Custom Resource to Kubernetes
 func (pm *ProbeManager) CreateProbeK8sResource(probe api.Probe, config ProbeConfig) error {
 	// Check if we can create Kubernetes resources
-	if !pm.isK8sCluster {
+	if !pm.isK8sCluster() {
 		return fmt.Errorf("not running in a Kubernetes cluster")
 	}
 

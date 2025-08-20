@@ -151,7 +151,7 @@ func TestProbeManager_initializeK8sClients(t *testing.T) {
 	pm := NewProbeManager("test-namespace", "")
 
 	// After initialization, check state
-	if pm.isK8sCluster {
+	if pm.isK8sCluster() {
 		// If we're actually in a K8s cluster
 		if pm.kubeClient == nil {
 			t.Error("kubeClient should not be nil when in K8s cluster")
@@ -225,7 +225,6 @@ func TestProbeManager_checkProbeCRDs_NoClient(t *testing.T) {
 		namespace:     "test",
 		httpClient:    &http.Client{},
 		kubeClient:    nil,
-		isK8sCluster:  false,
 		probeAPIGroup: "",
 	}
 
