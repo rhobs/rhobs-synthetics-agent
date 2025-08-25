@@ -96,7 +96,7 @@ api_base_urls:
   - "https://observatorium-api-2.example.com" 
   - "https://observatorium-api-3.example.com"
 
-api_tenant: "my-tenant"
+api_tenant: "my-rhobs-tenant"
 label_selector: "private=false,rhobs-synthetics/status=pending"
 
 # Kubernetes Configuration  
@@ -115,7 +115,7 @@ export GRACEFUL_TIMEOUT=60s
 # API configuration - comma-separated list of URLs
 export API_BASE_URLS="https://api1.example.com,https://api2.example.com,https://api3.example.com"
 
-export API_TENANT="my-tenant"
+export API_TENANT="my-rhobs-tenant"
 export LABEL_SELECTOR="private=false,rhobs-synthetics/status=pending"
 
 # Kubernetes settings
