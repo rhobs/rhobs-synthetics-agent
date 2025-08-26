@@ -2,17 +2,6 @@ apiVersion: template.openshift.io/v1
 kind: Template
 metadata:
   name: rhobs-synthetics-agent
-  annotations:
-    description: "RHOBS Synthetics Agent - synthetic monitoring agent for Red Hat Observability Service"
-    tags: "monitoring,synthetics,rhobs,observability"
-    iconClass: "icon-other-unknown"
-    openshift.io/display-name: "RHOBS Synthetics Agent"
-    openshift.io/documentation-url: "https://github.com/redhat-observability/rhobs-synthetics-agent"
-    openshift.io/support-url: "https://github.com/redhat-observability/rhobs-synthetics-agent/issues"
-    openshift.io/provider-display-name: "Red Hat"
-labels:
-  app: rhobs-synthetics-agent
-  template: rhobs-synthetics-agent
 objects:
 - apiVersion: v1
   kind: ServiceAccount
@@ -20,19 +9,21 @@ objects:
     name: ${APPLICATION_NAME}
     namespace: ${NAMESPACE}
     labels:
-      app.kubernetes.io/name: ${APPLICATION_NAME}
       app.kubernetes.io/component: synthetics-agent
+      app.kubernetes.io/instance: rhobs
+      app.kubernetes.io/name: synthetics-agent
       app.kubernetes.io/part-of: rhobs
-      app.kubernetes.io/managed-by: openshift-template
+      app.kubernetes.io/version: ${IMAGE_TAG}
 - apiVersion: rbac.authorization.k8s.io/v1
   kind: ClusterRole
   metadata:
     name: ${APPLICATION_NAME}
     labels:
-      app.kubernetes.io/name: ${APPLICATION_NAME}
       app.kubernetes.io/component: synthetics-agent
+      app.kubernetes.io/instance: rhobs
+      app.kubernetes.io/name: synthetics-agent
       app.kubernetes.io/part-of: rhobs
-      app.kubernetes.io/managed-by: openshift-template
+      app.kubernetes.io/version: ${IMAGE_TAG}
   rules:
     # Access to Probe CRDs (monitoring.rhobs/v1)
     - apiGroups: ["monitoring.rhobs"]
@@ -55,10 +46,11 @@ objects:
   metadata:
     name: ${APPLICATION_NAME}
     labels:
-      app.kubernetes.io/name: ${APPLICATION_NAME}
       app.kubernetes.io/component: synthetics-agent
+      app.kubernetes.io/instance: rhobs
+      app.kubernetes.io/name: synthetics-agent
       app.kubernetes.io/part-of: rhobs
-      app.kubernetes.io/managed-by: openshift-template
+      app.kubernetes.io/version: ${IMAGE_TAG}
   roleRef:
     apiGroup: rbac.authorization.k8s.io
     kind: ClusterRole
@@ -73,10 +65,11 @@ objects:
     name: ${APPLICATION_NAME}-config
     namespace: ${NAMESPACE}
     labels:
-      app.kubernetes.io/name: ${APPLICATION_NAME}
       app.kubernetes.io/component: synthetics-agent
+      app.kubernetes.io/instance: rhobs
+      app.kubernetes.io/name: synthetics-agent
       app.kubernetes.io/part-of: rhobs
-      app.kubernetes.io/managed-by: openshift-template
+      app.kubernetes.io/version: ${IMAGE_TAG}
   data:
     config.yaml: |
       # Logging configuration
@@ -106,10 +99,11 @@ objects:
     name: ${APPLICATION_NAME}
     namespace: ${NAMESPACE}
     labels:
-      app.kubernetes.io/name: ${APPLICATION_NAME}
       app.kubernetes.io/component: synthetics-agent
+      app.kubernetes.io/instance: rhobs
+      app.kubernetes.io/name: synthetics-agent
       app.kubernetes.io/part-of: rhobs
-      app.kubernetes.io/managed-by: openshift-template
+      app.kubernetes.io/version: ${IMAGE_TAG}
   spec:
     replicas: ${{REPLICA_COUNT}}
     strategy:
@@ -119,21 +113,25 @@ objects:
         maxUnavailable: 0
     selector:
       matchLabels:
-        app.kubernetes.io/name: ${APPLICATION_NAME}
-        deployment: ${APPLICATION_NAME}
+        app.kubernetes.io/component: synthetics-agent
+        app.kubernetes.io/instance: rhobs
+        app.kubernetes.io/name: synthetics-agent
+        app.kubernetes.io/part-of: rhobs
+        app.kubernetes.io/version: ${IMAGE_TAG}
     template:
       metadata:
         labels:
-          app.kubernetes.io/name: ${APPLICATION_NAME}
           app.kubernetes.io/component: synthetics-agent
+          app.kubernetes.io/instance: rhobs
+          app.kubernetes.io/name: synthetics-agent
           app.kubernetes.io/part-of: rhobs
-          deployment: ${APPLICATION_NAME}
+          app.kubernetes.io/version: ${IMAGE_TAG}
       spec:
         serviceAccountName: ${APPLICATION_NAME}
         containers:
           - name: synthetics-agent
-            image: ${IMAGE_REGISTRY}/${IMAGE_NAMESPACE}/${IMAGE_NAME}:${IMAGE_TAG}
-            imagePullPolicy: ${IMAGE_PULL_POLICY}
+            image: quay.io/redhat-services-prod/openshift/rhobs-synthetics-agent:${IMAGE_TAG}
+            imagePullPolicy: IfNotPresent
             command:
               - ./rhobs-synthetics-agent
             args:
@@ -160,6 +158,7 @@ objects:
               - name: config
                 mountPath: /etc/config
                 readOnly: true
+            terminationMessagePolicy: FallbackToLogsOnError
         volumes:
           - name: config
             configMap:
@@ -170,10 +169,11 @@ objects:
     name: ${APPLICATION_NAME}
     namespace: ${NAMESPACE}
     labels:
-      app.kubernetes.io/name: ${APPLICATION_NAME}
       app.kubernetes.io/component: synthetics-agent
+      app.kubernetes.io/instance: rhobs
+      app.kubernetes.io/name: synthetics-agent
       app.kubernetes.io/part-of: rhobs
-      app.kubernetes.io/managed-by: openshift-template
+      app.kubernetes.io/version: ${IMAGE_TAG}
   spec:
     ports:
       - name: http-metrics
@@ -181,23 +181,31 @@ objects:
         targetPort: http
         protocol: TCP
     selector:
-      app.kubernetes.io/name: ${APPLICATION_NAME}
-      deployment: ${APPLICATION_NAME}
+      app.kubernetes.io/component: synthetics-agent
+      app.kubernetes.io/instance: rhobs
+      app.kubernetes.io/name: synthetics-agent
+      app.kubernetes.io/part-of: rhobs
+      app.kubernetes.io/version: ${IMAGE_TAG}
 - apiVersion: monitoring.coreos.com/v1
   kind: ServiceMonitor
   metadata:
     name: ${APPLICATION_NAME}
     namespace: ${NAMESPACE}
     labels:
-      app.kubernetes.io/name: ${APPLICATION_NAME}
       app.kubernetes.io/component: synthetics-agent
+      app.kubernetes.io/instance: rhobs
+      app.kubernetes.io/name: synthetics-agent
       app.kubernetes.io/part-of: rhobs
-      app.kubernetes.io/managed-by: openshift-template
+      app.kubernetes.io/version: ${IMAGE_TAG}
+      prometheus: app-sre
   spec:
     selector:
       matchLabels:
-        app.kubernetes.io/name: ${APPLICATION_NAME}
         app.kubernetes.io/component: synthetics-agent
+        app.kubernetes.io/instance: rhobs
+        app.kubernetes.io/name: synthetics-agent
+        app.kubernetes.io/part-of: rhobs
+        app.kubernetes.io/version: ${IMAGE_TAG}
     endpoints:
       - port: http-metrics
         path: /metrics
@@ -212,32 +220,12 @@ parameters:
 - name: NAMESPACE
   displayName: Namespace
   description: The OpenShift Namespace where the agent will be deployed.
-  value: openshift-monitoring
-  required: true
-- name: IMAGE_REGISTRY
-  displayName: Image Registry
-  description: Container image registry
-  value: quay.io
-  required: true
-- name: IMAGE_NAMESPACE
-  displayName: Image Namespace
-  description: Namespace/organization in the image registry
   value: rhobs
-  required: true
-- name: IMAGE_NAME
-  displayName: Image Name
-  description: Container image name
-  value: rhobs-synthetics-agent
   required: true
 - name: IMAGE_TAG
   displayName: Image Tag
   description: Container image tag
   value: latest
-  required: true
-- name: IMAGE_PULL_POLICY
-  displayName: Image Pull Policy
-  description: Image pull policy for the container image
-  value: Always
   required: true
 - name: REPLICA_COUNT
   displayName: Replica Count
@@ -303,7 +291,7 @@ parameters:
 - name: PROBE_NAMESPACE
   displayName: Probe Namespace
   description: Kubernetes namespace where probe resources will be created
-  value: openshift-monitoring
+  value: rhobs
   required: true
 - name: BLACKBOX_INTERVAL
   displayName: Blackbox Interval
