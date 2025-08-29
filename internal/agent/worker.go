@@ -16,17 +16,19 @@ import (
 const defaultProbeNamespace = "default"
 
 type Worker struct {
-	config          *Config
-	apiClients      []*api.Client
-	probeManager    *k8s.ProbeManager
+	config            *Config
+	apiClients        []*api.Client
+	probeManager      *k8s.ProbeManager
+	proberManager     k8s.ProberManager
 	readinessCallback func(bool)
 }
 
-func NewWorker(cfg *Config) *Worker {
+func NewWorker(cfg *Config) (*Worker, error) {
 	var apiClients []*api.Client
 
 	namespace := defaultProbeNamespace
 	kubeConfigPath := ""
+	blackboxDeploymentCfg := k8s.BlackboxDeploymentConfig{}
 	if cfg != nil {
 		// Create API clients for each configured URL
 		apiURLs := cfg.GetAPIURLs()
@@ -43,16 +45,40 @@ func NewWorker(cfg *Config) *Worker {
 		if cfg.KubeConfig != "" {
 			kubeConfigPath = cfg.KubeConfig
 		}
+
+		// Blackbox exporter configs
+		if len(cfg.Blackbox.Deployment.Args) != 0 {
+			blackboxDeploymentCfg.Args = cfg.Blackbox.Deployment.Args
+		}
+		if len(cfg.Blackbox.Deployment.Cmd) != 0 {
+			blackboxDeploymentCfg.Cmd = cfg.Blackbox.Deployment.Cmd
+		}
+		if cfg.Blackbox.Deployment.Image != "" {
+			blackboxDeploymentCfg.Image = cfg.Blackbox.Deployment.Image
+		}
+		if cfg.Blackbox.Deployment.Labels != nil {
+			blackboxDeploymentCfg.Labels = cfg.Blackbox.Deployment.Labels
+		}
 	}
 
 	probeManager := k8s.NewProbeManager(namespace, kubeConfigPath)
+	var proberManager k8s.ProberManager
+	var err error
+	if kubeConfigPath != "" {
+		proberManager, err = k8s.NewBlackBoxProberManager(namespace, kubeConfigPath, blackboxDeploymentCfg)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create prober manager: %w", err)
+		}
+	}
 
-	return &Worker{
+	w := &Worker{
 		config:          cfg,
 		apiClients:      apiClients,
 		probeManager:    probeManager,
+		proberManager:   proberManager,
 		readinessCallback: func(bool) {}, // no-op by default
 	}
+	return w, nil
 }
 
 // SetReadinessCallback sets the callback function to signal readiness state changes
@@ -104,6 +130,9 @@ func (w *Worker) Start(ctx context.Context, taskWG *sync.WaitGroup, shutdownChan
 			if err := w.processProbes(ctx, taskWG, shutdownChan); err != nil {
 				logger.Errorf("work iteration failed: %v\n", err)
 				// Continue running even if one iteration fails
+			}
+			if err := w.processProbers(ctx, shutdownChan); err != nil {
+				logger.Errorf("failed to manage prober operands: %v\n", err)
 			}
 		}
 	}
@@ -268,20 +297,13 @@ func (w *Worker) updateProbeStatus(probeID, status string) {
 func (w *Worker) processProbe(ctx context.Context, probe api.Probe) error {
 	logger.Infof("Processing probe %s with target URL: %s", probe.ID, probe.StaticURL)
 
-	// Create probe configuration from the agent config
-	probeConfig := k8s.ProbeConfig{
-		Interval:  w.config.Blackbox.Interval,
-		Module:    w.config.Blackbox.Module,
-		ProberURL: w.config.Blackbox.ProberURL,
-	}
-
 	// Try to create the probe Custom Resource in Kubernetes
-	err := w.probeManager.CreateProbeK8sResource(probe, probeConfig)
+	err := w.probeManager.CreateProbeK8sResource(probe, w.config.Blackbox.Probing)
 	if err != nil {
 		// If K8s creation fails, fall back to logging the resource definition
 		logger.Infof("Failed to create Kubernetes resource (falling back to logging): %v", err)
 
-		cr, crErr := w.probeManager.CreateProbeResource(probe, probeConfig)
+		cr, crErr := w.probeManager.CreateProbeResource(probe, w.config.Blackbox.Probing)
 		if crErr != nil {
 			return fmt.Errorf("failed to create probe resource definition: %w", crErr)
 		}
@@ -297,5 +319,46 @@ func (w *Worker) processProbe(ctx context.Context, probe api.Probe) error {
 	} else {
 		logger.Infof("Successfully created monitoring.coreos.com/v1 Probe resource for probe %s", probe.ID)
 	}
+	return nil
+}
+
+func (w *Worker) processProbers(ctx context.Context, shutdownChan chan struct{}) error {
+	if w.proberManager == nil {
+		return nil
+	}
+
+	shards := w.getProberShards()
+	if len(shards) == 0 {
+		logger.Warn("no probers to manage")
+	}
+	for _, shard := range shards {
+		logger.Infof("reconciling prober %q", shard)
+		err := w.manageProber(ctx, shard)
+		if err != nil {
+			// log error, but continue to reconcile other tenants
+			logger.Errorf("failed to reconcile prober %q: %v", shard, err)
+		}
+	}
+	return nil
+}
+
+func (w *Worker) getProberShards() ([]string) {
+	return []string{"default"}
+}
+
+func (w *Worker) manageProber(ctx context.Context, name string) error {
+	prober, found, err := w.proberManager.GetProber(ctx, name)
+	if err != nil {
+		return fmt.Errorf("failed to retrieve prober %q: %w", name, err)
+	}
+	if !found {
+		logger.Infof("prober %q not found; creating new prober", name)
+		prober, err = w.proberManager.CreateProber(ctx, name)
+		if err != nil {
+			return fmt.Errorf("failed to create prober %q: %w", name, err)
+		}
+		logger.Infof("new prober %q for %q created successfully", prober, name)
+	}
+	logger.Debugf("prober: %#v", prober)
 	return nil
 }

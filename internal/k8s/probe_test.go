@@ -58,7 +58,7 @@ func TestProbeManager_CreateProbeResource(t *testing.T) {
 		Status: "pending",
 	}
 
-	probeConfig := ProbeConfig{
+	probeConfig := BlackboxProbingConfig{
 		Interval:  "30s",
 		Module:    "http_2xx",
 		ProberURL: "http://blackbox-exporter:9115",
@@ -123,7 +123,7 @@ func TestProbeManager_CreateProbeResource_InvalidURL(t *testing.T) {
 		Status: "pending",
 	}
 
-	probeConfig := ProbeConfig{
+	probeConfig := BlackboxProbingConfig{
 		Interval:  "30s",
 		Module:    "http_2xx",
 		ProberURL: "http://blackbox-exporter:9115",
@@ -185,7 +185,7 @@ func TestProbeManager_CreateProbeK8sResource_NotInCluster(t *testing.T) {
 		Status: "pending",
 	}
 
-	probeConfig := ProbeConfig{
+	probeConfig := BlackboxProbingConfig{
 		Interval:  "30s",
 		Module:    "http_2xx",
 		ProberURL: "http://blackbox-exporter:9115",

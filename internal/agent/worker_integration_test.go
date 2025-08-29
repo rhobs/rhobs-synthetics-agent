@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/rhobs/rhobs-synthetics-agent/internal/api"
+	"github.com/rhobs/rhobs-synthetics-agent/internal/k8s"
 )
 
 func TestWorker_processProbe_Success(t *testing.T) {
@@ -23,14 +24,19 @@ func TestWorker_processProbe_Success(t *testing.T) {
 		APIURLs:        []string{"http://example.com/api/metrics/v1/test/probes"},
 		LabelSelector: "test=true",
 		Namespace:     "monitoring",
-		Blackbox: BlackboxConfig{
-			Interval:  "30s",
-			Module:    "http_2xx",
-			ProberURL: "http://blackbox-exporter:9115",
+		Blackbox: k8s.BlackboxConfig{
+			Probing: k8s.BlackboxProbingConfig{
+				Interval:  "30s",
+				Module:    "http_2xx",
+				ProberURL: "http://blackbox-exporter:9115",
+			},
 		},
 	}
 
-	worker := NewWorker(cfg)
+	worker, err := NewWorker(cfg)
+	if err != nil {
+		t.Fatalf("unexpected error creating worker: %v", err)
+	}
 
 	probe := api.Probe{
 		ID:        "test-probe",
@@ -44,7 +50,7 @@ func TestWorker_processProbe_Success(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	err := worker.processProbe(ctx, probe)
+	err = worker.processProbe(ctx, probe)
 	if err != nil {
 		t.Errorf("processProbe() failed: %v", err)
 	}
@@ -55,14 +61,19 @@ func TestWorker_processProbe_ValidationFailure(t *testing.T) {
 		APIURLs:        []string{"http://example.com/api/metrics/v1/test/probes"},
 		LabelSelector: "test=true",
 		Namespace:     "monitoring",
-		Blackbox: BlackboxConfig{
-			Interval:  "30s",
-			Module:    "http_2xx",
-			ProberURL: "http://blackbox-exporter:9115",
+		Blackbox: k8s.BlackboxConfig{
+			Probing: k8s.BlackboxProbingConfig{
+				Interval:  "30s",
+				Module:    "http_2xx",
+				ProberURL: "http://blackbox-exporter:9115",
+			},
 		},
 	}
 
-	worker := NewWorker(cfg)
+	worker, err := NewWorker(cfg)
+	if err != nil {
+		t.Fatalf("unexpected error creating worker: %v", err)
+	}
 
 	// Probe with invalid URL
 	probe := api.Probe{
@@ -76,7 +87,7 @@ func TestWorker_processProbe_ValidationFailure(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	err := worker.processProbe(ctx, probe)
+	err = worker.processProbe(ctx, probe)
 	if err == nil {
 		t.Error("processProbe() should fail for invalid URL")
 	}
@@ -125,14 +136,20 @@ func TestWorker_FullIntegration(t *testing.T) {
 		APIURLs:          []string{apiServer.URL + "/api/metrics/v1/test/probes"},
 		LabelSelector:   "test=true",
 		Namespace:       "monitoring",
-		Blackbox: BlackboxConfig{
-			Interval:  "30s",
-			Module:    "http_2xx",
-			ProberURL: "http://blackbox-exporter:9115",
+		Blackbox: k8s.BlackboxConfig{
+			Probing: k8s.BlackboxProbingConfig{
+				Interval:  "30s",
+				Module:    "http_2xx",
+				ProberURL: "http://blackbox-exporter:9115",
+			},
 		},
 	}
 
-	worker := NewWorker(cfg)
+	worker, err := NewWorker(cfg)
+	if err != nil {
+		t.Fatalf("unexpected error creating worker: %v", err)
+	}
+
 	var taskWG sync.WaitGroup
 	shutdownChan := make(chan struct{})
 
@@ -140,7 +157,7 @@ func TestWorker_FullIntegration(t *testing.T) {
 	defer cancel()
 
 	// Run worker for a short time
-	err := worker.Start(ctx, &taskWG, shutdownChan)
+	err = worker.Start(ctx, &taskWG, shutdownChan)
 	if err == nil {
 		t.Error("Expected context timeout error")
 	}
@@ -185,19 +202,25 @@ func TestWorker_processProbes_WithValidConfig(t *testing.T) {
 		APIURLs:        []string{apiServer.URL + "/api/metrics/v1/test/probes"},
 		LabelSelector: "test=true",
 		Namespace:     "monitoring",
-		Blackbox: BlackboxConfig{
-			Interval:  "30s",
-			Module:    "http_2xx",
-			ProberURL: "http://blackbox-exporter:9115",
+		Blackbox: k8s.BlackboxConfig{
+			Probing: k8s.BlackboxProbingConfig{
+				Interval:  "30s",
+				Module:    "http_2xx",
+				ProberURL: "http://blackbox-exporter:9115",
+			},
 		},
 	}
 
-	worker := NewWorker(cfg)
+	worker, err := NewWorker(cfg)
+	if err != nil {
+		t.Fatalf("unexpected error creating worker: %v", err)
+	}
+
 	var taskWG sync.WaitGroup
 	shutdownChan := make(chan struct{})
 
 	ctx := context.Background()
-	err := worker.processProbes(ctx, &taskWG, shutdownChan)
+	err = worker.processProbes(ctx, &taskWG, shutdownChan)
 	if err != nil {
 		t.Errorf("processProbes() failed: %v", err)
 	}

@@ -26,7 +26,10 @@ func TestAgent_E2E_WithAPI(t *testing.T) {
 	}
 
 	// Create and start agent
-	testAgent := agent.New(cfg)
+	testAgent, err := agent.New(cfg)
+	if err != nil {
+		t.Fatalf("failed to start test agent: %v", err)
+	}
 
 	// Run agent in background
 	var agentErr error
@@ -170,7 +173,10 @@ func TestAgent_E2E_ErrorHandling(t *testing.T) {
 			LabelSelector:   "env=test",
 		}
 
-		testAgent := agent.New(cfg)
+		testAgent, err := agent.New(cfg)
+		if err != nil {
+			t.Fatalf("failed to start test agent: %v", err)
+		}
 
 		// Run agent briefly
 		var agentErr error
@@ -241,7 +247,10 @@ func TestAgent_E2E_ConfigurationVariations(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			testAgent := agent.New(tc.config)
+			testAgent, err := agent.New(tc.config)
+			if err != nil {
+				t.Fatalf("failed to start test agent: %v", err)
+			}
 
 			var wg sync.WaitGroup
 			wg.Add(1)

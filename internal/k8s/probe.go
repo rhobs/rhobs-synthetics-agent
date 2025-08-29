@@ -11,17 +11,12 @@ import (
 	"github.com/rhobs/rhobs-synthetics-agent/internal/api"
 	"github.com/rhobs/rhobs-synthetics-agent/internal/logger"
 	"github.com/rhobs/rhobs-synthetics-api/pkg/kubeclient"
+	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
-
-// ProbeConfig holds configuration for creating probe resources
-type ProbeConfig struct {
-	Interval  string `json:"interval"`
-	Module    string `json:"module"`
-	ProberURL string `json:"prober_url"`
-}
 
 // ProbeManager handles the creation and management of probe Custom Resources
 type ProbeManager struct {
@@ -149,7 +144,7 @@ func (pm *ProbeManager) checkProbeCRDs() {
 }
 
 // CreateProbeK8sResource creates and applies a Probe Custom Resource to Kubernetes
-func (pm *ProbeManager) CreateProbeK8sResource(probe api.Probe, config ProbeConfig) error {
+func (pm *ProbeManager) CreateProbeK8sResource(probe api.Probe, config BlackboxProbingConfig) error {
 	// Check if we can create Kubernetes resources
 	if !pm.isK8sCluster() {
 		return fmt.Errorf("not running in a Kubernetes cluster")
@@ -169,26 +164,10 @@ func (pm *ProbeManager) CreateProbeK8sResource(probe api.Probe, config ProbeConf
 		return fmt.Errorf("failed to create probe resource definition: %w", err)
 	}
 
-	// Convert to unstructured for dynamic client
-	unstructuredCR := &unstructured.Unstructured{}
-	unstructuredCR.SetUnstructuredContent(map[string]interface{}{
-		"apiVersion": pm.probeAPIGroup + "/v1",
-		"kind":       "Probe",
-		"metadata":   probeResource.ObjectMeta,
-		"spec": map[string]interface{}{
-			"prober": map[string]interface{}{
-				"url": probeResource.Spec.ProberSpec.URL,
-			},
-			"module":   probeResource.Spec.Module,
-			"interval": probeResource.Spec.Interval,
-			"targets": map[string]interface{}{
-				"staticConfig": map[string]interface{}{
-					"static": probeResource.Spec.Targets.StaticConfig.Targets,
-					"labels": probeResource.Spec.Targets.StaticConfig.Labels,
-				},
-			},
-		},
-	})
+	unstructuredCR, err := convertToUnstructured(probeResource)
+	if err != nil {
+		return fmt.Errorf("failed to convert probe resource to unstructured data: %w", err)
+	}
 
 	// Define the GVR for Probe resources
 	probeGVR := schema.GroupVersionResource{
@@ -215,7 +194,7 @@ func (pm *ProbeManager) CreateProbeK8sResource(probe api.Probe, config ProbeConf
 }
 
 // CreateProbeResource creates a Probe Custom Resource (compatible with both monitoring.coreos.com/v1 and monitoring.rhobs/v1)
-func (pm *ProbeManager) CreateProbeResource(probe api.Probe, config ProbeConfig) (*monitoringv1.Probe, error) {
+func (pm *ProbeManager) CreateProbeResource(probe api.Probe, config BlackboxProbingConfig) (*monitoringv1.Probe, error) {
 	if err := pm.ValidateURL(probe.StaticURL); err != nil {
 		return nil, fmt.Errorf("URL validation failed for probe %s: %w", probe.ID, err)
 	}
@@ -270,4 +249,27 @@ func (pm *ProbeManager) CreateProbeResource(probe api.Probe, config ProbeConfig)
 	}
 
 	return probeResource, nil
+}
+
+func convertToUnstructured(object interface{}) (*unstructured.Unstructured, error) {
+	obj, err := runtime.DefaultUnstructuredConverter.ToUnstructured(object)
+	if err != nil {
+		return &unstructured.Unstructured{}, err
+	}
+	unstruct := &unstructured.Unstructured{
+		Object: obj,
+	}
+	return unstruct, nil
+}
+
+func convertUnstructuredToDeployment(unstruct *unstructured.Unstructured) (*appsv1.Deployment, error) {
+	deployment := &appsv1.Deployment{}
+	if unstruct == nil {
+		return deployment, fmt.Errorf("provided unstructured object is nil")
+	}
+	if unstruct.Object == nil {
+		return deployment, fmt.Errorf("provided unstructured object has .Object=nil")
+	}
+	err := runtime.DefaultUnstructuredConverter.FromUnstructured(unstruct.Object, deployment)
+	return deployment, err
 }
