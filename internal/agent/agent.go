@@ -97,8 +97,11 @@ type Agent struct {
 	readyMu         sync.RWMutex
 }
 
-func New(cfg *Config) *Agent {
-	worker := NewWorker(cfg)
+func New(cfg *Config) (*Agent, error) {
+	worker, err := NewWorker(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize worker: %w", err)
+	}
 	resourceManager := NewResourceManager()
 
 	// Initialize agent info metrics
@@ -119,7 +122,7 @@ func New(cfg *Config) *Agent {
 	// Set readiness callback for the worker
 	worker.SetReadinessCallback(agent.setReady)
 
-	return agent
+	return agent, nil
 }
 
 func (a *Agent) Run() error {

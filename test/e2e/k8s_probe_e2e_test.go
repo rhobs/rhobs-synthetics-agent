@@ -56,7 +56,10 @@ func TestAgent_E2E_KubernetesProbeCreation(t *testing.T) {
 	}
 
 	// Create and start agent
-	testAgent := agent.New(cfg)
+	testAgent, err := agent.New(cfg)
+	if err != nil {
+		t.Fatalf("failed to start test agent: %v", err)
+	}
 
 	// Run agent in background
 	var wg sync.WaitGroup
@@ -82,7 +85,7 @@ func TestAgent_E2E_KubernetesProbeCreation(t *testing.T) {
 	t.Run("TestProbeResourceCreation", func(t *testing.T) {
 		pm := k8s.NewProbeManager("monitoring", "")
 		
-		config := k8s.ProbeConfig{
+		config := k8s.BlackboxProbingConfig{
 			Interval:  "30s",
 			Module:    "http_2xx",
 			ProberURL: "http://blackbox-exporter:9115",
@@ -165,7 +168,7 @@ func TestAgent_E2E_KubernetesProbeCreation(t *testing.T) {
 			Status:    "pending",
 		}
 
-		config := k8s.ProbeConfig{
+		config := k8s.BlackboxProbingConfig{
 			Interval:  "30s",
 			Module:    "http_2xx",
 			ProberURL: "http://blackbox-exporter:9115",
@@ -228,7 +231,7 @@ func TestAgent_E2E_KubernetesProbeWithFakeClient(t *testing.T) {
 		// Create a custom probe manager that uses fake clients
 		pm := createTestProbeManagerWithFakeClients("monitoring", fakeKubeClient, fakeDynamicClient)
 
-		config := k8s.ProbeConfig{
+		config := k8s.BlackboxProbingConfig{
 			Interval:  "30s",
 			Module:    "http_2xx",
 			ProberURL: "http://blackbox-exporter:9115",
@@ -357,7 +360,7 @@ func TestAgent_E2E_KubernetesProbeEdgeCases(t *testing.T) {
 	testCases := []struct {
 		name        string
 		probe       api.Probe
-		config      k8s.ProbeConfig
+		config      k8s.BlackboxProbingConfig
 		expectError bool
 		errorMsg    string
 	}{
@@ -369,7 +372,7 @@ func TestAgent_E2E_KubernetesProbeEdgeCases(t *testing.T) {
 				Labels:    map[string]string{"env": "test"},
 				Status:    "pending",
 			},
-			config: k8s.ProbeConfig{
+			config: k8s.BlackboxProbingConfig{
 				Interval:  "60s",
 				Module:    "http_2xx",
 				ProberURL: "http://blackbox-exporter:9115",
@@ -391,7 +394,7 @@ func TestAgent_E2E_KubernetesProbeEdgeCases(t *testing.T) {
 				},
 				Status: "active",
 			},
-			config: k8s.ProbeConfig{
+			config: k8s.BlackboxProbingConfig{
 				Interval:  "15s",
 				Module:    "http_2xx",
 				ProberURL: "http://blackbox-exporter:9115",
@@ -406,7 +409,7 @@ func TestAgent_E2E_KubernetesProbeEdgeCases(t *testing.T) {
 				Labels:    map[string]string{"env": "test"},
 				Status:    "pending",
 			},
-			config: k8s.ProbeConfig{
+			config: k8s.BlackboxProbingConfig{
 				Interval:  "30s",
 				Module:    "http_2xx",
 				ProberURL: "http://blackbox-exporter:9115",
@@ -422,7 +425,7 @@ func TestAgent_E2E_KubernetesProbeEdgeCases(t *testing.T) {
 				Labels:    map[string]string{"env": "test"},
 				Status:    "pending",
 			},
-			config: k8s.ProbeConfig{
+			config: k8s.BlackboxProbingConfig{
 				Interval:  "30s",
 				Module:    "http_2xx",
 				ProberURL: "http://blackbox-exporter:9115",
