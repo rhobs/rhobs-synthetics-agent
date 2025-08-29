@@ -379,6 +379,16 @@ func TestLoadConfig_APIURLsFromEnvironment(t *testing.T) {
 			expected: []string{"https://api1.example.com/api/metrics/v1/tenant1/probes", "https://api2.example.com/api/metrics/v1/tenant2/probes", "https://api3.example.com/api/metrics/v1/tenant3/probes"},
 		},
 		{
+			name:     "multiple URLs with spaces",
+			envValue: "https://api1.example.com/api/metrics/v1/tenant1/probes, https://api2.example.com/api/metrics/v1/tenant2/probes , https://api3.example.com/api/metrics/v1/tenant3/probes",
+			expected: []string{"https://api1.example.com/api/metrics/v1/tenant1/probes", "https://api2.example.com/api/metrics/v1/tenant2/probes", "https://api3.example.com/api/metrics/v1/tenant3/probes"},
+		},
+		{
+			name:     "single URL with spaces",
+			envValue: " https://api.example.com/api/metrics/v1/tenant/probes ",
+			expected: []string{"https://api.example.com/api/metrics/v1/tenant/probes"},
+		},
+		{
 			name:     "empty string",
 			envValue: "",
 			expected: []string{},

@@ -76,13 +76,21 @@ func LoadConfig() (*Config, error) {
 		return nil, err
 	}
 
-	// Handle comma-separated API URLs from environment variables
-	if apiURLsStr := viper.GetString("api_urls"); apiURLsStr != "" && len(cfg.APIURLs) == 0 {
-		urls := strings.Split(apiURLsStr, ",")
-		for i, url := range urls {
-			urls[i] = strings.TrimSpace(url)
+	// Handle comma-separated API URLs from environment variables or string values
+	if apiURLsStr := viper.GetString("api_urls"); apiURLsStr != "" {
+		// Check if this is a comma-separated string (contains commas) or if APIURLs came from string parsing
+		if strings.Contains(apiURLsStr, ",") || len(cfg.APIURLs) == 0 {
+			urls := strings.Split(apiURLsStr, ",")
+			for i, url := range urls {
+				urls[i] = strings.TrimSpace(url)
+			}
+			cfg.APIURLs = urls
+		} else if len(cfg.APIURLs) > 0 {
+			// APIURLs was populated by viper's automatic parsing, but we should still trim whitespace
+			for i, url := range cfg.APIURLs {
+				cfg.APIURLs[i] = strings.TrimSpace(url)
+			}
 		}
-		cfg.APIURLs = urls
 	}
 
 	return &cfg, nil
