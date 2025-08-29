@@ -54,7 +54,7 @@ func TestClient_GetProbes(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewClient(server.URL, "test-tenant", "/api/metrics/v1", "")
+	client := NewClient(server.URL+"/api/metrics/v1/test-tenant/probes", "")
 	probes, err := client.GetProbes("private=false,rhobs-synthetics/status=pending")
 
 	if err != nil {
@@ -103,7 +103,7 @@ func TestClient_UpdateProbeStatus(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewClient(server.URL, "test-tenant", "/api/metrics/v1", "")
+	client := NewClient(server.URL+"/api/metrics/v1/test-tenant/probes", "")
 	err := client.UpdateProbeStatus("probe-1", "active")
 
 	if err != nil {

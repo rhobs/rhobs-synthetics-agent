@@ -28,7 +28,6 @@ oc process -f templates/template.yaml --param-file=templates/example-parameters.
 oc process -f templates/template.yaml \
   -p APPLICATION_NAME=my-synthetics-agent \
   -p NAMESPACE=my-monitoring-namespace \
-  -p API_TENANT=my-tenant \
   -p LOG_LEVEL=debug \
   | oc apply -f -
 ```
@@ -42,8 +41,7 @@ The following table lists the most important configurable parameters:
 | Parameter | Description | Default |
 |-----------|-------------|---------|
 | `NAMESPACE` | Namespace where the agent will be deployed | `"rhobs"` |
-| `API_BASE_URLS` | YAML list of API URLs to poll for probes | Single example URL |
-| `API_TENANT` | API tenant identifier | `"default"` |
+| `API_URLS` | YAML list of complete API URLs to poll for probes | Single example URL |
 | `LABEL_SELECTOR` | Label selector for filtering probes | `"private=false,rhobs-synthetics/status=pending"` |
 | `PROBE_NAMESPACE` | Namespace where probe resources will be created | `"rhobs"` |
 | `POLLING_INTERVAL` | How often to poll APIs | `"30s"` |
@@ -89,11 +87,11 @@ oc process -f templates/template.yaml --param-file=templates/my-dev-params.env |
 #### Custom API Configuration
 ```bash
 # For multiple API URLs, use YAML format in the parameter file:
-API_BASE_URLS=|2+
+API_URLS=|2+
 
-  - "https://api1.example.com"
-  - "https://api2.example.com"
-  - "https://api3.example.com"
+  - "https://api1.example.com/api/metrics/v1/tenant1/probes"
+  - "https://api2.example.com/api/metrics/v1/tenant2/probes"
+  - "https://api3.example.com/api/metrics/v1/tenant3/probes"
 ```
 
 ## Required Permissions

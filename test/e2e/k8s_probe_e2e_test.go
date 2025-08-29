@@ -51,8 +51,7 @@ func TestAgent_E2E_KubernetesProbeCreation(t *testing.T) {
 		LogFormat:       "text",
 		PollingInterval: 1 * time.Second,
 		GracefulTimeout: 2 * time.Second,
-		APIBaseURLs:     []string{mockAPI.URL},
-		APIEndpoint:     "/probes",
+		APIURLs:         []string{mockAPI.URL + "/probes"},
 		LabelSelector:   "env=test,private=false",
 	}
 

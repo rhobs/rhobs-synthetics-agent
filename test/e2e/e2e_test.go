@@ -21,8 +21,7 @@ func TestAgent_E2E_WithAPI(t *testing.T) {
 		LogFormat:       "text",
 		PollingInterval: 1 * time.Second,
 		GracefulTimeout: 2 * time.Second,
-		APIBaseURLs:     []string{mockAPI.URL},
-		APIEndpoint:     "/probes",
+		APIURLs:         []string{mockAPI.URL + "/probes"},
 		LabelSelector:   "env=test,private=false",
 	}
 
@@ -65,7 +64,7 @@ func TestAgent_E2E_WithAPI(t *testing.T) {
 	// Test probe status updates
 	t.Run("VerifyProbeStatusUpdates", func(t *testing.T) {
 		// Simulate probe status update
-		client := api.NewClient(mockAPI.URL, "", "/probes", "")
+		client := api.NewClient(mockAPI.URL+"/probes", "")
 		
 		err := client.UpdateProbeStatus("test-probe-1", "running")
 		if err != nil {
@@ -81,7 +80,7 @@ func TestAgent_E2E_WithAPI(t *testing.T) {
 
 	// Test probe retrieval with label selector
 	t.Run("VerifyLabelSelector", func(t *testing.T) {
-		client := api.NewClient(mockAPI.URL, "", "/probes", "")
+		client := api.NewClient(mockAPI.URL+"/probes", "")
 		
 		// Get probes with label selector
 		probes, err := client.GetProbes("env=test,private=false")
@@ -106,7 +105,7 @@ func TestAgent_E2E_WithAPI(t *testing.T) {
 
 	// Test probe filtering
 	t.Run("VerifyProbeFiltering", func(t *testing.T) {
-		client := api.NewClient(mockAPI.URL, "", "/probes", "")
+		client := api.NewClient(mockAPI.URL+"/probes", "")
 		
 		// Add a probe that shouldn't match the filter
 		mockAPI.AddProbe(&api.Probe{
@@ -167,8 +166,7 @@ func TestAgent_E2E_ErrorHandling(t *testing.T) {
 			LogFormat:       "text", 
 			PollingInterval: 1 * time.Second,
 			GracefulTimeout: 2 * time.Second,
-			APIBaseURLs:      []string{"http://localhost:9999"}, // Non-existent server
-			APIEndpoint:     "/probes",
+			APIURLs:          []string{"http://localhost:9999/probes"}, // Non-existent server
 			LabelSelector:   "env=test",
 		}
 
@@ -222,8 +220,7 @@ func TestAgent_E2E_ConfigurationVariations(t *testing.T) {
 				LogFormat:       "json",
 				PollingInterval: 1 * time.Second,
 				GracefulTimeout: 2 * time.Second,
-				APIBaseURLs:     []string{mockAPI.URL},
-				APIEndpoint:     "/probes",
+				APIURLs:         []string{mockAPI.URL + "/probes"},
 				LabelSelector:   "", // No selector - should get all probes
 			},
 			expectedProbes: 2, // Should get all default test probes
@@ -235,8 +232,7 @@ func TestAgent_E2E_ConfigurationVariations(t *testing.T) {
 				LogFormat:       "json",
 				PollingInterval: 1 * time.Second,
 				GracefulTimeout: 2 * time.Second,
-				APIBaseURLs:     []string{mockAPI.URL},
-				APIEndpoint:     "/probes",
+				APIURLs:         []string{mockAPI.URL + "/probes"},
 				LabelSelector:   "env=test,private=false,nonexistent=value",
 			},
 			expectedProbes: 0, // Should get no probes due to non-existent label
@@ -259,7 +255,7 @@ func TestAgent_E2E_ConfigurationVariations(t *testing.T) {
 			time.Sleep(2 * time.Second)
 
 			// Test API client with same configuration
-			client := api.NewClient(tc.config.APIBaseURLs[0], "", tc.config.APIEndpoint, "")
+			client := api.NewClient(tc.config.APIURLs[0], "")
 			probes, err := client.GetProbes(tc.config.LabelSelector)
 			
 			if err != nil {

@@ -81,8 +81,7 @@ objects:
       graceful_timeout: ${GRACEFUL_TIMEOUT}
 
       # API Configuration
-      api_base_urls:${API_BASE_URLS}
-      api_tenant: ${API_TENANT}
+      api_urls:${API_URLS}
       label_selector: ${LABEL_SELECTOR}
 
       # Kubernetes Configuration
@@ -272,16 +271,11 @@ parameters:
   description: Graceful shutdown timeout
   value: 30s
   required: true
-- name: API_BASE_URLS
-  displayName: API Base URLs
-  description: YAML list of API URLs to poll (including leading newlines and spaces)
+- name: API_URLS
+  displayName: API URLs  
+  description: YAML list of complete API URLs to poll (including leading newlines and spaces)
   value: |2+
-        - "https://observatorium-api.example.com"
-  required: true
-- name: API_TENANT
-  displayName: API Tenant
-  description: API tenant identifier
-  value: default
+        - "https://observatorium-api.example.com/api/metrics/v1/default/probes"
   required: true
 - name: LABEL_SELECTOR
   displayName: Label Selector

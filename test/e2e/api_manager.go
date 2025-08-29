@@ -300,7 +300,7 @@ func (m *RealAPIManager) SeedTestData() error {
 
 // GetProbeCount returns the number of probes in the API
 func (m *RealAPIManager) GetProbeCount() (int, error) {
-	apiClient := api.NewClient(m.apiURL, "", "/probes", "")
+	apiClient := api.NewClient(m.apiURL+"/probes", "")
 	probes, err := apiClient.GetProbes("")
 	if err != nil {
 		return 0, err

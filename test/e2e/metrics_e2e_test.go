@@ -25,8 +25,7 @@ func TestAgent_E2E_Metrics(t *testing.T) {
 		LogFormat:       "json",
 		PollingInterval: 2 * time.Second,
 		GracefulTimeout: 5 * time.Second,
-		APIBaseURLs:     []string{mockAPI.URL},
-		APIEndpoint:     "/probes",
+		APIURLs:         []string{mockAPI.URL + "/probes"},
 		LabelSelector:   "env=test",
 	}
 
@@ -275,8 +274,7 @@ func TestAgent_E2E_MetricsWithAPIFailure(t *testing.T) {
 		LogFormat:       "json",
 		PollingInterval: 1 * time.Second,
 		GracefulTimeout: 3 * time.Second,
-		APIBaseURLs:     []string{"http://localhost:9999"}, // Non-existent server
-		APIEndpoint:     "/probes",
+		APIURLs:         []string{"http://localhost:9999/probes"}, // Non-existent server
 		LabelSelector:   "env=test",
 	}
 
@@ -348,7 +346,7 @@ func TestAgent_E2E_MetricsStandaloneMode(t *testing.T) {
 		LogFormat:       "json",
 		PollingInterval: 1 * time.Second,
 		GracefulTimeout: 2 * time.Second,
-		APIBaseURLs:     []string{}, // No API URLs - standalone mode
+		APIURLs:         []string{}, // No API URLs - standalone mode
 	}
 
 	testAgent := agent.New(cfg)

@@ -51,7 +51,7 @@ func TestClient_GetProbes_ErrorCases(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(tt.serverResponse))
 			defer server.Close()
 
-			client := NewClient(server.URL, "test-tenant", "/api/metrics/v1", "")
+			client := NewClient(server.URL+"/api/metrics/v1/test-tenant/probes", "")
 			_, err := client.GetProbes("test=true")
 
 			if tt.expectError && err == nil {
@@ -99,7 +99,7 @@ func TestClient_UpdateProbeStatus_ErrorCases(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(tt.serverResponse))
 			defer server.Close()
 
-			client := NewClient(server.URL, "test-tenant", "/api/metrics/v1", "")
+			client := NewClient(server.URL+"/api/metrics/v1/test-tenant/probes", "")
 			err := client.UpdateProbeStatus("probe-1", "created")
 
 			if tt.expectError && err == nil {
@@ -112,7 +112,7 @@ func TestClient_UpdateProbeStatus_ErrorCases(t *testing.T) {
 }
 
 func TestClient_InvalidURL(t *testing.T) {
-	client := NewClient("invalid-url", "test-tenant", "/api/metrics/v1", "")
+	client := NewClient("invalid-url/api/metrics/v1/test-tenant/probes", "")
 	
 	_, err := client.GetProbes("test=true")
 	if err == nil {
@@ -126,14 +126,10 @@ func TestClient_InvalidURL(t *testing.T) {
 }
 
 func TestNewClient(t *testing.T) {
-	client := NewClient("https://example.com", "test-tenant", "/api/metrics/v1", "")
+	client := NewClient("https://example.com/api/metrics/v1/test-tenant/probes", "")
 	
-	if client.BaseURL != "https://example.com" {
-		t.Errorf("Expected BaseURL 'https://example.com', got %s", client.BaseURL)
-	}
-	
-	if client.Tenant != "test-tenant" {
-		t.Errorf("Expected Tenant 'test-tenant', got %s", client.Tenant)
+	if client.BaseURL != "https://example.com/api/metrics/v1/test-tenant/probes" {
+		t.Errorf("Expected BaseURL 'https://example.com/api/metrics/v1/test-tenant/probes', got %s", client.BaseURL)
 	}
 	
 	if client.HTTPClient == nil {

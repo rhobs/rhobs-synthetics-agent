@@ -357,7 +357,7 @@ func TestAgent_Config_String_Integration(t *testing.T) {
 	agent := New(cfg)
 
 	// Verify the config string formatting works with the agent
-	expected := "LogLevel=debug, LogFormat=text, PollingInterval=45s, GracefulTimeout=1m0s, APIBaseURLs=[]"
+	expected := "LogLevel=debug, LogFormat=text, PollingInterval=45s, GracefulTimeout=1m0s, APIURLs=[]"
 	actual := agent.config.String()
 
 	if actual != expected {

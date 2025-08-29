@@ -29,10 +29,10 @@ func NewWorker(cfg *Config) *Worker {
 	kubeConfigPath := ""
 	if cfg != nil {
 		// Create API clients for each configured URL
-		apiURLs := cfg.GetAPIBaseURLs()
-		for _, baseURL := range apiURLs {
-			if baseURL != "" {
-				client := api.NewClient(baseURL, cfg.APITenant, cfg.APIEndpoint, cfg.JWTToken)
+		apiURLs := cfg.GetAPIURLs()
+		for _, apiURL := range apiURLs {
+			if apiURL != "" {
+				client := api.NewClient(apiURL, cfg.JWTToken)
 				apiClients = append(apiClients, client)
 			}
 		}
@@ -65,7 +65,7 @@ func (w *Worker) Start(ctx context.Context, resourceMgr *ResourceManager, taskWG
 
 	if len(w.apiClients) == 0 {
 		logger.Info("Warning: No API URLs configured. Agent will run in standalone mode without probe processing.")
-		logger.Info("To enable probe processing, configure api_base_urls in your config file or set API_BASE_URLS environment variable.")
+		logger.Info("To enable probe processing, configure api_urls in your config file or set API_URLS environment variable with complete URLs (e.g., https://api.example.com/api/metrics/v1/tenant/probes).")
 		// Signal ready for standalone mode
 		w.readinessCallback(true)
 	} else {

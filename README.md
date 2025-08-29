@@ -112,10 +112,8 @@ export LOG_FORMAT=json
 export POLLING_INTERVAL=30s
 export GRACEFUL_TIMEOUT=60s
 
-# API configuration - comma-separated list of URLs
-export API_BASE_URLS="https://api1.example.com,https://api2.example.com,https://api3.example.com"
-
-export API_TENANT="my-rhobs-tenant"
+# API configuration - comma-separated list of complete URLs
+export API_URLS="https://api1.example.com/api/metrics/v1/my-rhobs-tenant/probes,https://api2.example.com/api/metrics/v1/my-rhobs-tenant/probes,https://api3.example.com/api/metrics/v1/my-rhobs-tenant/probes"
 export LABEL_SELECTOR="private=false,rhobs-synthetics/status=pending"
 
 # Kubernetes settings
@@ -132,8 +130,7 @@ export NAMESPACE="monitoring"
   --log-level debug \
   --interval 30s \
   --graceful-timeout 60s \
-  --api-base-urls "https://api1.example.com,https://api2.example.com" \
-  --api-tenant "my-tenant"
+  --api-urls "https://api1.example.com/api/metrics/v1/my-tenant/probes,https://api2.example.com/api/metrics/v1/my-tenant/probes"
 ```
 
 ## Architecture
@@ -279,8 +276,8 @@ The agent is designed to run as a Kubernetes Deployment with:
 ### Common Issues
 
 1. **API Connection Failures**
-   - Verify `API_BASE_URLS` and network connectivity
-   - Check API credentials and tenant configuration
+   - Verify `API_URLS` and network connectivity
+   - Check API credentials and ensure URLs include the correct tenant
 
 2. **URL Validation Failures**
    - Review target URLs in probe configurations
