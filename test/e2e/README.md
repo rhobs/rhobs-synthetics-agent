@@ -213,8 +213,7 @@ The e2e tests use the following agent configuration:
     LogFormat:       "text",
     PollingInterval: 2 * time.Second,
     GracefulTimeout: 5 * time.Second,
-    APIBaseURLs:     []string{mockAPI.URL}, // Points to mock server
-    APIEndpoint:     "/probes",
+    APIURLs:         []string{mockAPI.URL + "/probes"}, // Points to mock server
     LabelSelector:   "env=test,private=false",
 }
 ```

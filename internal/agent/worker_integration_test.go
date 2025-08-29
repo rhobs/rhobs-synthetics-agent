@@ -20,9 +20,7 @@ func TestWorker_processProbe_Success(t *testing.T) {
 	defer validationServer.Close()
 
 	cfg := &Config{
-		APIBaseURLs:    []string{"http://example.com"},
-		APITenant:     "test",
-		APIEndpoint:   "/api/metrics/v1",
+		APIURLs:        []string{"http://example.com/api/metrics/v1/test/probes"},
 		LabelSelector: "test=true",
 		Namespace:     "monitoring",
 		Blackbox: BlackboxConfig{
@@ -54,9 +52,7 @@ func TestWorker_processProbe_Success(t *testing.T) {
 
 func TestWorker_processProbe_ValidationFailure(t *testing.T) {
 	cfg := &Config{
-		APIBaseURLs:    []string{"http://example.com"},
-		APITenant:     "test",
-		APIEndpoint:   "/api/metrics/v1",
+		APIURLs:        []string{"http://example.com/api/metrics/v1/test/probes"},
 		LabelSelector: "test=true",
 		Namespace:     "monitoring",
 		Blackbox: BlackboxConfig{
@@ -126,9 +122,7 @@ func TestWorker_FullIntegration(t *testing.T) {
 	cfg := &Config{
 		PollingInterval: 100 * time.Millisecond,
 		GracefulTimeout: 1 * time.Second,
-		APIBaseURLs:      []string{apiServer.URL},
-		APITenant:       "test",
-		APIEndpoint:     "/api/metrics/v1",
+		APIURLs:          []string{apiServer.URL + "/api/metrics/v1/test/probes"},
 		LabelSelector:   "test=true",
 		Namespace:       "monitoring",
 		Blackbox: BlackboxConfig{
@@ -189,9 +183,7 @@ func TestWorker_processProbes_WithValidConfig(t *testing.T) {
 	defer apiServer.Close()
 
 	cfg := &Config{
-		APIBaseURLs:    []string{apiServer.URL},
-		APITenant:     "test",
-		APIEndpoint:   "/api/metrics/v1",
+		APIURLs:        []string{apiServer.URL + "/api/metrics/v1/test/probes"},
 		LabelSelector: "test=true",
 		Namespace:     "monitoring",
 		Blackbox: BlackboxConfig{

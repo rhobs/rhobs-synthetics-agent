@@ -193,7 +193,7 @@ func TestWorker_fetchProbeList(t *testing.T) {
 	cfg := &Config{
 		PollingInterval: 30 * time.Second,
 		GracefulTimeout: 30 * time.Second,
-		APIBaseURLs:      []string{},
+		APIURLs:         []string{},
 	}
 
 	worker := NewWorker(cfg)
@@ -213,8 +213,7 @@ func TestWorker_fetchProbeList_WithAPI(t *testing.T) {
 	cfg := &Config{
 		PollingInterval: 30 * time.Second,
 		GracefulTimeout: 30 * time.Second,
-		APIBaseURLs:      []string{"http://example.com"},
-		APITenant:       "test",
+		APIURLs:         []string{"http://example.com/api/metrics/v1/test/probes"},
 		LabelSelector:   "test=true",
 	}
 
@@ -459,9 +458,7 @@ func TestWorker_MultipleAPIClients(t *testing.T) {
 	cfg := &Config{
 		PollingInterval: 30 * time.Second,
 		GracefulTimeout: 30 * time.Second,
-		APIBaseURLs:     []string{"https://api1.example.com", "https://api2.example.com", "https://api3.example.com"},
-		APITenant:       "test",
-		APIEndpoint:     "/api/metrics/v1",
+		APIURLs:         []string{"https://api1.example.com/api/metrics/v1/test/probes", "https://api2.example.com/api/metrics/v1/test/probes", "https://api3.example.com/api/metrics/v1/test/probes"},
 	}
 
 	worker := NewWorker(cfg)
@@ -475,7 +472,7 @@ func TestWorker_MultipleAPIClients(t *testing.T) {
 	cfgEmpty := &Config{
 		PollingInterval: 30 * time.Second,
 		GracefulTimeout: 30 * time.Second,
-		APIBaseURLs:     []string{},
+		APIURLs:         []string{},
 	}
 
 	workerEmpty := NewWorker(cfgEmpty)
@@ -494,7 +491,7 @@ func TestWorker_fetchProbeList_NoAPIClients(t *testing.T) {
 	cfg := &Config{
 		PollingInterval: 30 * time.Second,
 		GracefulTimeout: 30 * time.Second,
-		APIBaseURLs:     []string{}, // No API URLs
+		APIURLs:         []string{}, // No API URLs
 	}
 
 	worker := NewWorker(cfg)
@@ -533,9 +530,7 @@ func TestWorker_updateProbeStatus_MultipleClients(t *testing.T) {
 	cfg := &Config{
 		PollingInterval: 30 * time.Second,
 		GracefulTimeout: 30 * time.Second,
-		APIBaseURLs:     []string{successServer.URL, failureServer.URL, successServer.URL},
-		APITenant:       "test",
-		APIEndpoint:     "/api/metrics/v1",
+		APIURLs:         []string{successServer.URL + "/api/metrics/v1/test/probes", failureServer.URL + "/api/metrics/v1/test/probes", successServer.URL + "/api/metrics/v1/test/probes"},
 	}
 
 	worker := NewWorker(cfg)
@@ -558,9 +553,7 @@ func TestNewWorker_EdgeCases(t *testing.T) {
 	cfg := &Config{
 		PollingInterval: 30 * time.Second,
 		GracefulTimeout: 30 * time.Second,
-		APIBaseURLs:     []string{"https://api1.example.com", "", "https://api3.example.com"},
-		APITenant:       "test",
-		APIEndpoint:     "/api/metrics/v1",
+		APIURLs:         []string{"https://api1.example.com/api/metrics/v1/test/probes", "", "https://api3.example.com/api/metrics/v1/test/probes"},
 	}
 
 	worker := NewWorker(cfg)
@@ -574,7 +567,7 @@ func TestNewWorker_EdgeCases(t *testing.T) {
 	cfgNoNamespace := &Config{
 		PollingInterval: 30 * time.Second,
 		GracefulTimeout: 30 * time.Second,
-		APIBaseURLs:     []string{"https://api.example.com"},
+		APIURLs:         []string{"https://api.example.com/api/metrics/v1/tenant/probes"},
 		Namespace:       "", // Empty namespace
 	}
 

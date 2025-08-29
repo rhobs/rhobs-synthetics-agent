@@ -15,10 +15,8 @@ type Config struct {
 	GracefulTimeout time.Duration `mapstructure:"graceful_timeout"`
 	
 	// API Configuration
-	APIBaseURLs     []string `mapstructure:"api_base_urls"`     // List of API URLs to poll
-	APITenant       string   `mapstructure:"api_tenant"`
+	APIURLs         []string `mapstructure:"api_urls"`          // List of complete API URLs to poll
 	LabelSelector   string   `mapstructure:"label_selector"`
-	APIEndpoint     string   `mapstructure:"api_endpoint"`
 	JWTToken        string   `mapstructure:"jwt_token"`
 	
 	// Kubernetes Configuration
@@ -36,15 +34,15 @@ type BlackboxConfig struct {
 	ProberURL string `mapstructure:"prober_url"`
 }
 
-// GetAPIBaseURLs returns the list of API URLs
-func (c *Config) GetAPIBaseURLs() []string {
-	return c.APIBaseURLs
+// GetAPIURLs returns the list of complete API URLs
+func (c *Config) GetAPIURLs() []string {
+	return c.APIURLs
 }
 
 // String returns a formatted string representation of the configuration
 func (c *Config) String() string {
-	urls := c.GetAPIBaseURLs()
-	return fmt.Sprintf("LogLevel=%s, LogFormat=%s, PollingInterval=%v, GracefulTimeout=%v, APIBaseURLs=%v",
+	urls := c.GetAPIURLs()
+	return fmt.Sprintf("LogLevel=%s, LogFormat=%s, PollingInterval=%v, GracefulTimeout=%v, APIURLs=%v",
 		c.LogLevel, c.LogFormat, c.PollingInterval, c.GracefulTimeout, urls)
 }
 
@@ -53,10 +51,8 @@ func LoadConfig() (*Config, error) {
 	viper.SetDefault("log_format", "json")
 	viper.SetDefault("polling_interval", "30s")
 	viper.SetDefault("graceful_timeout", "30s")
-	viper.SetDefault("api_base_urls", []string{})
-	viper.SetDefault("api_tenant", "default")
+	viper.SetDefault("api_urls", []string{})
 	viper.SetDefault("label_selector", "private=false,rhobs-synthetics/status=pending")
-	viper.SetDefault("api_endpoint", "/api/metrics/v1")
 	viper.SetDefault("jwt_token", "")
 	viper.SetDefault("kube_config", "")
 	viper.SetDefault("namespace", "default")
@@ -81,12 +77,12 @@ func LoadConfig() (*Config, error) {
 	}
 
 	// Handle comma-separated API URLs from environment variables
-	if apiURLsStr := viper.GetString("api_base_urls"); apiURLsStr != "" && len(cfg.APIBaseURLs) == 0 {
+	if apiURLsStr := viper.GetString("api_urls"); apiURLsStr != "" && len(cfg.APIURLs) == 0 {
 		urls := strings.Split(apiURLsStr, ",")
 		for i, url := range urls {
 			urls[i] = strings.TrimSpace(url)
 		}
-		cfg.APIBaseURLs = urls
+		cfg.APIURLs = urls
 	}
 
 	return &cfg, nil

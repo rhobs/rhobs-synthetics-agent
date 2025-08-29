@@ -30,20 +30,16 @@ type ProbeStatusUpdate struct {
 
 // Client handles communication with the RHOBS Probes API
 type Client struct {
-	BaseURL     string
-	HTTPClient  *http.Client
-	Tenant      string
-	APIEndpoint string
-	JWTToken    string
+	BaseURL    string
+	HTTPClient *http.Client
+	JWTToken   string
 }
 
-// NewClient creates a new API client
-func NewClient(baseURL, tenant, apiEndpoint, jwtToken string) *Client {
+// NewClient creates a new API client with a full URL
+func NewClient(apiURL, jwtToken string) *Client {
 	return &Client{
-		BaseURL:     baseURL,
-		Tenant:      tenant,
-		APIEndpoint: apiEndpoint,
-		JWTToken:    jwtToken,
+		BaseURL:  apiURL,
+		JWTToken: jwtToken,
 		HTTPClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
@@ -52,16 +48,7 @@ func NewClient(baseURL, tenant, apiEndpoint, jwtToken string) *Client {
 
 // GetProbes retrieves probes from the API with optional label selectors
 func (c *Client) GetProbes(labelSelector string) ([]Probe, error) {
-	var endpoint string
-	if c.APIEndpoint == "/probes" {
-		// Direct API access without tenant
-		endpoint = "/probes"
-	} else {
-		// Observatorium-style API with tenant
-		endpoint = fmt.Sprintf("%s/%s/probes", c.APIEndpoint, c.Tenant)
-	}
-	
-	reqURL, err := url.Parse(c.BaseURL + endpoint)
+	reqURL, err := url.Parse(c.BaseURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse URL: %w", err)
 	}
@@ -107,16 +94,7 @@ func (c *Client) GetProbes(labelSelector string) ([]Probe, error) {
 
 // UpdateProbeStatus updates the status of a probe
 func (c *Client) UpdateProbeStatus(probeID, status string) error {
-	var endpoint string
-	if c.APIEndpoint == "/probes" {
-		// Direct API access without tenant
-		endpoint = fmt.Sprintf("/probes/%s", probeID)
-	} else {
-		// Observatorium-style API with tenant
-		endpoint = fmt.Sprintf("%s/%s/probes/%s", c.APIEndpoint, c.Tenant, probeID)
-	}
-	
-	reqURL := c.BaseURL + endpoint
+	reqURL := fmt.Sprintf("%s/%s", c.BaseURL, probeID)
 
 	statusUpdate := ProbeStatusUpdate{Status: status}
 	payload, err := json.Marshal(statusUpdate)
