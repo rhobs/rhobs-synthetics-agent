@@ -49,7 +49,6 @@ func TestWorker_Start_ContextCancellation(t *testing.T) {
 	}
 
 	worker := NewWorker(cfg)
-	resourceMgr := NewResourceManager()
 	var taskWG sync.WaitGroup
 	shutdownChan := make(chan struct{})
 
@@ -58,7 +57,7 @@ func TestWorker_Start_ContextCancellation(t *testing.T) {
 	defer cancel()
 
 	// Start the worker
-	err := worker.Start(ctx, resourceMgr, &taskWG, shutdownChan)
+	err := worker.Start(ctx, &taskWG, shutdownChan)
 
 	// Should return context.DeadlineExceeded or context.Canceled
 	if err == nil {
@@ -73,7 +72,6 @@ func TestWorker_Start_ShutdownSignal(t *testing.T) {
 	}
 
 	worker := NewWorker(cfg)
-	resourceMgr := NewResourceManager()
 	var taskWG sync.WaitGroup
 	shutdownChan := make(chan struct{})
 
@@ -82,7 +80,7 @@ func TestWorker_Start_ShutdownSignal(t *testing.T) {
 	// Start the worker in a goroutine
 	done := make(chan error, 1)
 	go func() {
-		done <- worker.Start(ctx, resourceMgr, &taskWG, shutdownChan)
+		done <- worker.Start(ctx, &taskWG, shutdownChan)
 	}()
 
 	// Send shutdown signal after a short delay
@@ -107,7 +105,6 @@ func TestWorker_Start_PollingInterval(t *testing.T) {
 	}
 
 	worker := NewWorker(cfg)
-	resourceMgr := NewResourceManager()
 	var taskWG sync.WaitGroup
 	shutdownChan := make(chan struct{})
 
@@ -116,7 +113,7 @@ func TestWorker_Start_PollingInterval(t *testing.T) {
 
 	// Start worker
 	startTime := time.Now()
-	err := worker.Start(ctx, resourceMgr, &taskWG, shutdownChan)
+	err := worker.Start(ctx, &taskWG, shutdownChan)
 
 	// Should have run for approximately the context timeout duration
 	elapsed := time.Since(startTime)
@@ -136,14 +133,13 @@ func TestWorker_processProbes(t *testing.T) {
 	}
 
 	worker := NewWorker(cfg)
-	resourceMgr := NewResourceManager()
 	var taskWG sync.WaitGroup
 	shutdownChan := make(chan struct{})
 
 	ctx := context.Background()
 
 	// Test normal processing
-	err := worker.processProbes(ctx, resourceMgr, &taskWG, shutdownChan)
+	err := worker.processProbes(ctx, &taskWG, shutdownChan)
 	if err != nil {
 		t.Errorf("processProbes() returned unexpected error: %v", err)
 	}
@@ -159,7 +155,6 @@ func TestWorker_processProbes_ShutdownSignal(t *testing.T) {
 	}
 
 	worker := NewWorker(cfg)
-	resourceMgr := NewResourceManager()
 	var taskWG sync.WaitGroup
 	shutdownChan := make(chan struct{})
 
@@ -168,7 +163,7 @@ func TestWorker_processProbes_ShutdownSignal(t *testing.T) {
 
 	ctx := context.Background()
 
-	err := worker.processProbes(ctx, resourceMgr, &taskWG, shutdownChan)
+	err := worker.processProbes(ctx, &taskWG, shutdownChan)
 	if err != nil {
 		t.Errorf("processProbes() returned unexpected error during shutdown: %v", err)
 	}
@@ -235,7 +230,6 @@ func TestWorker_Start_InitialRun(t *testing.T) {
 	}
 
 	worker := NewWorker(cfg)
-	resourceMgr := NewResourceManager()
 	var taskWG sync.WaitGroup
 	shutdownChan := make(chan struct{})
 
@@ -244,7 +238,7 @@ func TestWorker_Start_InitialRun(t *testing.T) {
 	defer cancel()
 
 	startTime := time.Now()
-	err := worker.Start(ctx, resourceMgr, &taskWG, shutdownChan)
+	err := worker.Start(ctx, &taskWG, shutdownChan)
 	elapsed := time.Since(startTime)
 
 	// Should have completed the initial run (which takes ~1.5s total)
@@ -268,7 +262,6 @@ func TestWorker_ConcurrentShutdown(t *testing.T) {
 	}
 
 	worker := NewWorker(cfg)
-	resourceMgr := NewResourceManager()
 	var taskWG sync.WaitGroup
 	shutdownChan := make(chan struct{})
 
@@ -277,7 +270,7 @@ func TestWorker_ConcurrentShutdown(t *testing.T) {
 	// Start the worker
 	done := make(chan error, 1)
 	go func() {
-		done <- worker.Start(ctx, resourceMgr, &taskWG, shutdownChan)
+		done <- worker.Start(ctx, &taskWG, shutdownChan)
 	}()
 
 	// Let it run for a bit to start some tasks

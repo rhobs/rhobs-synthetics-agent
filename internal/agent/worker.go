@@ -60,7 +60,7 @@ func (w *Worker) SetReadinessCallback(callback func(bool)) {
 	w.readinessCallback = callback
 }
 
-func (w *Worker) Start(ctx context.Context, resourceMgr *ResourceManager, taskWG *sync.WaitGroup, shutdownChan chan struct{}) error {
+func (w *Worker) Start(ctx context.Context, taskWG *sync.WaitGroup, shutdownChan chan struct{}) error {
 	logger.Info("RHOBS Synthetic Agent worker thread started")
 
 	if len(w.apiClients) == 0 {
@@ -76,7 +76,7 @@ func (w *Worker) Start(ctx context.Context, resourceMgr *ResourceManager, taskWG
 	defer ticker.Stop()
 
 	// Initial run
-	if err := w.processProbes(ctx, resourceMgr, taskWG, shutdownChan); err != nil {
+	if err := w.processProbes(ctx, taskWG, shutdownChan); err != nil {
 		logger.Errorf("initial work failed: %v\n", err)
 		w.readinessCallback(false)
 	} else if len(w.apiClients) > 0 {
@@ -101,7 +101,7 @@ func (w *Worker) Start(ctx context.Context, resourceMgr *ResourceManager, taskWG
 			default:
 			}
 
-			if err := w.processProbes(ctx, resourceMgr, taskWG, shutdownChan); err != nil {
+			if err := w.processProbes(ctx, taskWG, shutdownChan); err != nil {
 				logger.Errorf("work iteration failed: %v\n", err)
 				// Continue running even if one iteration fails
 			}
@@ -109,7 +109,7 @@ func (w *Worker) Start(ctx context.Context, resourceMgr *ResourceManager, taskWG
 	}
 }
 
-func (w *Worker) processProbes(ctx context.Context, resourceMgr *ResourceManager, taskWG *sync.WaitGroup, shutdownChan chan struct{}) error {
+func (w *Worker) processProbes(ctx context.Context, taskWG *sync.WaitGroup, shutdownChan chan struct{}) error {
 	// Check if shutdown is in progress before starting new tasks
 	select {
 	case <-shutdownChan:

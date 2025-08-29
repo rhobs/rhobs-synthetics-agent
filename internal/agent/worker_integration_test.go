@@ -133,7 +133,6 @@ func TestWorker_FullIntegration(t *testing.T) {
 	}
 
 	worker := NewWorker(cfg)
-	resourceMgr := NewResourceManager()
 	var taskWG sync.WaitGroup
 	shutdownChan := make(chan struct{})
 
@@ -141,7 +140,7 @@ func TestWorker_FullIntegration(t *testing.T) {
 	defer cancel()
 
 	// Run worker for a short time
-	err := worker.Start(ctx, resourceMgr, &taskWG, shutdownChan)
+	err := worker.Start(ctx, &taskWG, shutdownChan)
 	if err == nil {
 		t.Error("Expected context timeout error")
 	}
@@ -194,12 +193,11 @@ func TestWorker_processProbes_WithValidConfig(t *testing.T) {
 	}
 
 	worker := NewWorker(cfg)
-	resourceMgr := NewResourceManager()
 	var taskWG sync.WaitGroup
 	shutdownChan := make(chan struct{})
 
 	ctx := context.Background()
-	err := worker.processProbes(ctx, resourceMgr, &taskWG, shutdownChan)
+	err := worker.processProbes(ctx, &taskWG, shutdownChan)
 	if err != nil {
 		t.Errorf("processProbes() failed: %v", err)
 	}

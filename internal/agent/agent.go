@@ -3,7 +3,6 @@ package agent
 import (
 	"context"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"os/signal"
@@ -17,79 +16,9 @@ import (
 	"github.com/rhobs/rhobs-synthetics-agent/internal/version"
 )
 
-// ResourceManager handles cleanup of resources like connections and file handles
-type ResourceManager struct {
-	httpClient  *http.Client
-	openFiles   []io.Closer
-	connections []io.Closer
-	mu          sync.Mutex
-}
-
-type ResourceType string
-const (
-	ResourceTypeFile       = "file"
-	ResourceTypeConnection = "connection"
-)
-
-// NewResourceManager creates a new resource manager
-func NewResourceManager() *ResourceManager {
-	return &ResourceManager{
-		httpClient:  &http.Client{Timeout: 30 * time.Second},
-		openFiles:   make([]io.Closer, 0),
-		connections: make([]io.Closer, 0),
-	}
-}
-
-// AddResource adds a resource to be tracked and cleaned up
-func (rm *ResourceManager) AddResource(resource io.Closer, resourceType ResourceType) {
-	rm.mu.Lock()
-	defer rm.mu.Unlock()
-
-	switch resourceType {
-	case ResourceTypeFile:
-		rm.openFiles = append(rm.openFiles, resource)
-	case ResourceTypeConnection:
-		rm.connections = append(rm.connections, resource)
-	}
-}
-
-// Cleanup releases all held resources
-func (rm *ResourceManager) Cleanup() {
-	rm.mu.Lock()
-	defer rm.mu.Unlock()
-
-	logger.Infof("Cleaning up resources...")
-
-	// Close HTTP client transport
-	if transport, ok := rm.httpClient.Transport.(*http.Transport); ok {
-		transport.CloseIdleConnections()
-	}
-
-	// Close all file handles
-	for i, file := range rm.openFiles {
-		if file != nil {
-			if err := file.Close(); err != nil {
-				logger.Errorf("Error closing file handle %d: %v", i, err)
-			}
-		}
-	}
-
-	// Close all network connections
-	for i, conn := range rm.connections {
-		if conn != nil {
-			if err := conn.Close(); err != nil {
-				logger.Errorf("Error closing connection %d: %v", i, err)
-			}
-		}
-	}
-
-	logger.Infof("Resource cleanup completed")
-}
-
 type Agent struct {
 	config          *Config
 	worker          *Worker
-	resourceManager *ResourceManager
 	taskWG          sync.WaitGroup
 	shutdownChan    chan struct{}
 	shutdownOnce    sync.Once
@@ -99,7 +28,6 @@ type Agent struct {
 
 func New(cfg *Config) *Agent {
 	worker := NewWorker(cfg)
-	resourceManager := NewResourceManager()
 
 	// Initialize agent info metrics
 	namespace := "default"
@@ -111,7 +39,6 @@ func New(cfg *Config) *Agent {
 	agent := &Agent{
 		config:          cfg,
 		worker:          worker,
-		resourceManager: resourceManager,
 		shutdownChan:    make(chan struct{}),
 		ready:           false,
 	}
@@ -123,9 +50,6 @@ func New(cfg *Config) *Agent {
 }
 
 func (a *Agent) Run() error {
-	// Ensure cleanup happens on exit
-	defer a.resourceManager.Cleanup()
-
 	var g run.Group
 
 	// Signal handling
@@ -170,7 +94,7 @@ func (a *Agent) Run() error {
 	{
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
-			return a.worker.Start(ctx, a.resourceManager, &a.taskWG, a.shutdownChan)
+			return a.worker.Start(ctx, &a.taskWG, a.shutdownChan)
 		}, func(error) {
 			logger.Info("shutting down worker")
 			a.setReady(false)
