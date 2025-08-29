@@ -81,7 +81,7 @@ objects:
       graceful_timeout: ${GRACEFUL_TIMEOUT}
 
       # API Configuration
-      api_urls:${API_URLS}
+      api_urls: ${API_URLS}
       label_selector: ${LABEL_SELECTOR}
 
       # Kubernetes Configuration
