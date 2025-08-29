@@ -273,9 +273,8 @@ parameters:
   required: true
 - name: API_URLS
   displayName: API URLs
-  description: YAML list of complete API URLs to poll (including leading newlines and spaces)
-  value: |2+
-        - "https://observatorium-api.example.com/api/metrics/v1/default/probes"
+  description: Comma-delimited string of complete API URLs to poll
+  value: "https://observatorium-api.example.com/api/metrics/v1/default/probes"
   required: true
 - name: LABEL_SELECTOR
   displayName: Label Selector
