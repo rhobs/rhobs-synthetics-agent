@@ -214,7 +214,7 @@ parameters:
 - name: APPLICATION_NAME
   displayName: Application Name
   description: The name assigned to all objects and the related imagestream.
-  value: rhobs-synthetics-agent
+  value: synthetics-agent
   required: true
 - name: NAMESPACE
   displayName: Namespace
@@ -272,7 +272,7 @@ parameters:
   value: 30s
   required: true
 - name: API_URLS
-  displayName: API URLs  
+  displayName: API URLs
   description: YAML list of complete API URLs to poll (including leading newlines and spaces)
   value: |2+
         - "https://observatorium-api.example.com/api/metrics/v1/default/probes"
