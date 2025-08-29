@@ -201,7 +201,10 @@ func TestNew(t *testing.T) {
 		GracefulTimeout: 30 * time.Second,
 	}
 
-	agent := New(cfg)
+	agent, err := New(cfg)
+	if err != nil {
+		t.Fatalf("unexpected error creating agent: %v", err)
+	}
 
 	if agent == nil {
 		t.Fatal("New() returned nil")
@@ -233,7 +236,10 @@ func TestNew(t *testing.T) {
 }
 
 func TestNew_NilConfig(t *testing.T) {
-	agent := New(nil)
+	agent, err := New(nil)
+	if err != nil {
+		t.Fatalf("unexpected error creating agent: %v", err)
+	}
 
 	if agent == nil {
 		t.Fatal("New() returned nil with nil config")
@@ -261,7 +267,10 @@ func TestAgent_Run_QuickShutdown(t *testing.T) {
 		GracefulTimeout: 100 * time.Millisecond,
 	}
 
-	agent := New(cfg)
+	agent, err := New(cfg)
+	if err != nil {
+		t.Fatalf("unexpected error creating agent: %v", err)
+	}
 
 	// Test the shutdown channel mechanism directly
 	done := make(chan error, 1)
@@ -300,13 +309,16 @@ func TestAgent_startHealthServer(t *testing.T) {
 		GracefulTimeout: 30 * time.Second,
 	}
 
-	agent := New(cfg)
+	agent, err := New(cfg)
+	if err != nil {
+		t.Fatalf("unexpected error creating agent: %v", err)
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 
 	// startMetricsServer should block until context is cancelled
-	err := agent.startMetricsServer(ctx)
+	err = agent.startMetricsServer(ctx)
 
 	// Should return nil when context is cancelled
 	if err != nil {
@@ -322,7 +334,10 @@ func TestAgent_TaskWaitGroup(t *testing.T) {
 		GracefulTimeout: 200 * time.Millisecond,
 	}
 
-	agent := New(cfg)
+	agent, err := New(cfg)
+	if err != nil {
+		t.Fatalf("unexpected error creating agent: %v", err)
+	}
 
 	// Test that we can track a task with the wait group
 	agent.taskWG.Add(1)
@@ -354,7 +369,10 @@ func TestAgent_Config_String_Integration(t *testing.T) {
 		GracefulTimeout: 60 * time.Second,
 	}
 
-	agent := New(cfg)
+	agent, err := New(cfg)
+	if err != nil {
+		t.Fatalf("unexpected error creating agent: %v", err)
+	}
 
 	// Verify the config string formatting works with the agent
 	expected := "LogLevel=debug, LogFormat=text, PollingInterval=45s, GracefulTimeout=1m0s, APIURLs=[]"
@@ -381,7 +399,10 @@ func TestAgent_ShutdownChannel_State(t *testing.T) {
 		GracefulTimeout: 1 * time.Second,
 	}
 
-	agent := New(cfg)
+	agent, err := New(cfg)
+	if err != nil {
+		t.Fatalf("unexpected error creating agent: %v", err)
+	}
 
 	// Initially, shutdown channel should be open
 	if isClosed(agent.shutdownChan) {
@@ -389,7 +410,10 @@ func TestAgent_ShutdownChannel_State(t *testing.T) {
 	}
 
 	// Create a new agent to test closing behavior (avoid double close)
-	agent2 := New(cfg)
+	agent2, err := New(cfg)
+	if err != nil {
+		t.Fatalf("unexpected error creating agent: %v", err)
+	}
 
 	// After closing, it should be closed
 	close(agent2.shutdownChan)
@@ -444,7 +468,10 @@ func BenchmarkConfig_String(b *testing.B) {
 }
 
 func TestAgent_handleLiveness(t *testing.T) {
-	agent := New(nil)
+	agent, err := New(nil)
+	if err != nil {
+		t.Fatalf("unexpected error creating agent: %v", err)
+	}
 	
 	req := httptest.NewRequest("GET", "/livez", nil)
 	w := httptest.NewRecorder()
@@ -479,7 +506,10 @@ func TestAgent_handleLiveness(t *testing.T) {
 }
 
 func TestAgent_handleReadiness_NotReady(t *testing.T) {
-	agent := New(nil)
+	agent, err := New(nil)
+	if err != nil {
+		t.Fatalf("unexpected error creating agent: %v", err)
+	}
 	// Agent starts as not ready
 	
 	req := httptest.NewRequest("GET", "/readyz", nil)
@@ -515,7 +545,10 @@ func TestAgent_handleReadiness_NotReady(t *testing.T) {
 }
 
 func TestAgent_handleReadiness_Ready(t *testing.T) {
-	agent := New(nil)
+	agent, err := New(nil)
+	if err != nil {
+		t.Fatalf("unexpected error creating agent: %v", err)
+	}
 	agent.setReady(true)
 	
 	req := httptest.NewRequest("GET", "/readyz", nil)
@@ -551,7 +584,10 @@ func TestAgent_handleReadiness_Ready(t *testing.T) {
 }
 
 func TestAgent_ReadinessStateTransitions(t *testing.T) {
-	agent := New(nil)
+	agent, err := New(nil)
+	if err != nil {
+		t.Fatalf("unexpected error creating agent: %v", err)
+	}
 	
 	// Initial state should be not ready
 	if agent.isReady() {
@@ -572,7 +608,10 @@ func TestAgent_ReadinessStateTransitions(t *testing.T) {
 }
 
 func TestAgent_ReadinessConcurrency(t *testing.T) {
-	agent := New(nil)
+	agent, err := New(nil)
+	if err != nil {
+		t.Fatalf("unexpected error creating agent: %v", err)
+	}
 	
 	var wg sync.WaitGroup
 	
@@ -599,7 +638,10 @@ func TestAgent_ReadinessConcurrency(t *testing.T) {
 }
 
 func TestAgent_HealthEndpointsInMetricsServer(t *testing.T) {
-	agent := New(nil)
+	agent, err := New(nil)
+	if err != nil {
+		t.Fatalf("unexpected error creating agent: %v", err)
+	}
 	
 	// Create a test server using the same mux configuration as the agent
 	mux := http.NewServeMux()

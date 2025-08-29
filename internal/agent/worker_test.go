@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/rhobs/rhobs-synthetics-agent/internal/api"
+	"github.com/rhobs/rhobs-synthetics-agent/internal/k8s"
 )
 
 func TestNewWorker(t *testing.T) {
@@ -19,7 +20,10 @@ func TestNewWorker(t *testing.T) {
 		GracefulTimeout: 30 * time.Second,
 	}
 
-	worker := NewWorker(cfg)
+	worker, err := NewWorker(cfg)
+	if err != nil {
+		t.Fatalf("unexpected error creating worker: %v", err)
+	}
 
 	if worker == nil {
 		t.Fatal("NewWorker() returned nil")
@@ -31,7 +35,10 @@ func TestNewWorker(t *testing.T) {
 }
 
 func TestNewWorker_NilConfig(t *testing.T) {
-	worker := NewWorker(nil)
+	worker, err := NewWorker(nil)
+	if err != nil {
+		t.Fatalf("unexpected error creating worker: %v", err)
+	}
 
 	if worker == nil {
 		t.Fatal("NewWorker() returned nil with nil config")
@@ -48,7 +55,10 @@ func TestWorker_Start_ContextCancellation(t *testing.T) {
 		GracefulTimeout: 1 * time.Second,
 	}
 
-	worker := NewWorker(cfg)
+	worker, err := NewWorker(cfg)
+	if err != nil {
+		t.Fatalf("unexpected error creating worker: %v", err)
+	}
 	resourceMgr := NewResourceManager()
 	var taskWG sync.WaitGroup
 	shutdownChan := make(chan struct{})
@@ -58,7 +68,7 @@ func TestWorker_Start_ContextCancellation(t *testing.T) {
 	defer cancel()
 
 	// Start the worker
-	err := worker.Start(ctx, resourceMgr, &taskWG, shutdownChan)
+	err = worker.Start(ctx, resourceMgr, &taskWG, shutdownChan)
 
 	// Should return context.DeadlineExceeded or context.Canceled
 	if err == nil {
@@ -72,7 +82,10 @@ func TestWorker_Start_ShutdownSignal(t *testing.T) {
 		GracefulTimeout: 1 * time.Second,
 	}
 
-	worker := NewWorker(cfg)
+	worker, err := NewWorker(cfg)
+	if err != nil {
+		t.Fatalf("unexpected error creating worker: %v", err)
+	}
 	resourceMgr := NewResourceManager()
 	var taskWG sync.WaitGroup
 	shutdownChan := make(chan struct{})
@@ -106,7 +119,10 @@ func TestWorker_Start_PollingInterval(t *testing.T) {
 		GracefulTimeout: 1 * time.Second,
 	}
 
-	worker := NewWorker(cfg)
+	worker, err := NewWorker(cfg)
+	if err != nil {
+		t.Fatalf("unexpected error creating worker: %v", err)
+	}
 	resourceMgr := NewResourceManager()
 	var taskWG sync.WaitGroup
 	shutdownChan := make(chan struct{})
@@ -116,7 +132,7 @@ func TestWorker_Start_PollingInterval(t *testing.T) {
 
 	// Start worker
 	startTime := time.Now()
-	err := worker.Start(ctx, resourceMgr, &taskWG, shutdownChan)
+	err = worker.Start(ctx, resourceMgr, &taskWG, shutdownChan)
 
 	// Should have run for approximately the context timeout duration
 	elapsed := time.Since(startTime)
@@ -135,7 +151,10 @@ func TestWorker_processProbes(t *testing.T) {
 		GracefulTimeout: 30 * time.Second,
 	}
 
-	worker := NewWorker(cfg)
+	worker, err := NewWorker(cfg)
+	if err != nil {
+		t.Fatalf("unexpected error creating worker: %v", err)
+	}
 	resourceMgr := NewResourceManager()
 	var taskWG sync.WaitGroup
 	shutdownChan := make(chan struct{})
@@ -143,7 +162,7 @@ func TestWorker_processProbes(t *testing.T) {
 	ctx := context.Background()
 
 	// Test normal processing
-	err := worker.processProbes(ctx, resourceMgr, &taskWG, shutdownChan)
+	err = worker.processProbes(ctx, resourceMgr, &taskWG, shutdownChan)
 	if err != nil {
 		t.Errorf("processProbes() returned unexpected error: %v", err)
 	}
@@ -158,7 +177,10 @@ func TestWorker_processProbes_ShutdownSignal(t *testing.T) {
 		GracefulTimeout: 30 * time.Second,
 	}
 
-	worker := NewWorker(cfg)
+	worker, err := NewWorker(cfg)
+	if err != nil {
+		t.Fatalf("unexpected error creating worker: %v", err)
+	}
 	resourceMgr := NewResourceManager()
 	var taskWG sync.WaitGroup
 	shutdownChan := make(chan struct{})
@@ -168,7 +190,7 @@ func TestWorker_processProbes_ShutdownSignal(t *testing.T) {
 
 	ctx := context.Background()
 
-	err := worker.processProbes(ctx, resourceMgr, &taskWG, shutdownChan)
+	err = worker.processProbes(ctx, resourceMgr, &taskWG, shutdownChan)
 	if err != nil {
 		t.Errorf("processProbes() returned unexpected error during shutdown: %v", err)
 	}
@@ -196,7 +218,10 @@ func TestWorker_fetchProbeList(t *testing.T) {
 		APIURLs:         []string{},
 	}
 
-	worker := NewWorker(cfg)
+	worker, err := NewWorker(cfg)
+	if err != nil {
+		t.Fatalf("unexpected error creating worker: %v", err)
+	}
 	ctx := context.Background()
 
 	// Test that fetchProbeList returns empty slice without API client
@@ -217,12 +242,15 @@ func TestWorker_fetchProbeList_WithAPI(t *testing.T) {
 		LabelSelector:   "test=true",
 	}
 
-	worker := NewWorker(cfg)
+	worker, err := NewWorker(cfg)
+	if err != nil {
+		t.Fatalf("unexpected error creating worker: %v", err)
+	}
 	ctx := context.Background()
 
 	// This will fail because the API endpoint doesn't exist
 	// but it tests that the method signature is correct
-	_, err := worker.fetchProbeList(ctx)
+	_, err = worker.fetchProbeList(ctx)
 	if err == nil {
 		t.Error("Expected fetchProbeList to fail when API endpoint doesn't exist")
 	}
@@ -234,7 +262,10 @@ func TestWorker_Start_InitialRun(t *testing.T) {
 		GracefulTimeout: 1 * time.Second,
 	}
 
-	worker := NewWorker(cfg)
+	worker, err := NewWorker(cfg)
+	if err != nil {
+		t.Fatalf("unexpected error creating worker: %v", err)
+	}
 	resourceMgr := NewResourceManager()
 	var taskWG sync.WaitGroup
 	shutdownChan := make(chan struct{})
@@ -244,7 +275,7 @@ func TestWorker_Start_InitialRun(t *testing.T) {
 	defer cancel()
 
 	startTime := time.Now()
-	err := worker.Start(ctx, resourceMgr, &taskWG, shutdownChan)
+	err = worker.Start(ctx, resourceMgr, &taskWG, shutdownChan)
 	elapsed := time.Since(startTime)
 
 	// Should have completed the initial run (which takes ~1.5s total)
@@ -267,7 +298,10 @@ func TestWorker_ConcurrentShutdown(t *testing.T) {
 		GracefulTimeout: 1 * time.Second,
 	}
 
-	worker := NewWorker(cfg)
+	worker, err := NewWorker(cfg)
+	if err != nil {
+		t.Fatalf("unexpected error creating worker: %v", err)
+	}
 	resourceMgr := NewResourceManager()
 	var taskWG sync.WaitGroup
 	shutdownChan := make(chan struct{})
@@ -316,14 +350,19 @@ func TestWorker_processProbe_K8sIntegration(t *testing.T) {
 		PollingInterval: 30 * time.Second,
 		GracefulTimeout: 30 * time.Second,
 		Namespace:       "test-namespace",
-		Blackbox: BlackboxConfig{
-			Interval:  "30s",
-			Module:    "http_2xx",
-			ProberURL: "http://blackbox-exporter:9115",
+		Blackbox: k8s.BlackboxConfig{
+			Probing: k8s.BlackboxProbingConfig{
+				Interval:  "30s",
+				Module:    "http_2xx",
+				ProberURL: "http://blackbox-exporter:9115",
+			},
 		},
 	}
 
-	worker := NewWorker(cfg)
+	worker, err := NewWorker(cfg)
+	if err != nil {
+		t.Fatalf("unexpected error creating worker: %v", err)
+	}
 	ctx := context.Background()
 
 	probe := api.Probe{
@@ -337,7 +376,7 @@ func TestWorker_processProbe_K8sIntegration(t *testing.T) {
 
 	// This should not fail even when not in K8s cluster
 	// because it falls back to logging
-	err := worker.processProbe(ctx, probe)
+	err = worker.processProbe(ctx, probe)
 	if err != nil {
 		t.Errorf("processProbe() should not fail when falling back to logging: %v", err)
 	}
@@ -348,14 +387,19 @@ func TestWorker_processProbe_FallbackLogging(t *testing.T) {
 		PollingInterval: 30 * time.Second,
 		GracefulTimeout: 30 * time.Second,
 		Namespace:       "test-namespace",
-		Blackbox: BlackboxConfig{
-			Interval:  "30s",
-			Module:    "http_2xx",
-			ProberURL: "http://blackbox-exporter:9115",
+		Blackbox: k8s.BlackboxConfig{
+			Probing: k8s.BlackboxProbingConfig{
+				Interval:  "30s",
+				Module:    "http_2xx",
+				ProberURL: "http://blackbox-exporter:9115",
+			},
 		},
 	}
 
-	worker := NewWorker(cfg)
+	worker, err := NewWorker(cfg)
+	if err != nil {
+		t.Fatalf("unexpected error creating worker: %v", err)
+	}
 	ctx := context.Background()
 
 	// Test with an invalid URL to trigger URL validation failure
@@ -369,7 +413,7 @@ func TestWorker_processProbe_FallbackLogging(t *testing.T) {
 	}
 
 	// This should fail because URL validation fails
-	err := worker.processProbe(ctx, probe)
+	err = worker.processProbe(ctx, probe)
 	if err == nil {
 		t.Error("processProbe() should fail when URL validation fails")
 	}
@@ -380,7 +424,10 @@ func TestWorker_deduplicateProbes(t *testing.T) {
 		PollingInterval: 30 * time.Second,
 		GracefulTimeout: 30 * time.Second,
 	}
-	worker := NewWorker(cfg)
+	worker, err := NewWorker(cfg)
+	if err != nil {
+		t.Fatalf("unexpected error creating worker: %v", err)
+	}
 
 	tests := []struct {
 		name     string
@@ -461,7 +508,10 @@ func TestWorker_MultipleAPIClients(t *testing.T) {
 		APIURLs:         []string{"https://api1.example.com/api/metrics/v1/test/probes", "https://api2.example.com/api/metrics/v1/test/probes", "https://api3.example.com/api/metrics/v1/test/probes"},
 	}
 
-	worker := NewWorker(cfg)
+	worker, err := NewWorker(cfg)
+	if err != nil {
+		t.Fatalf("unexpected error creating worker: %v", err)
+	}
 
 	// Verify that multiple API clients were created
 	if len(worker.apiClients) != 3 {
@@ -475,13 +525,19 @@ func TestWorker_MultipleAPIClients(t *testing.T) {
 		APIURLs:         []string{},
 	}
 
-	workerEmpty := NewWorker(cfgEmpty)
+	workerEmpty, err := NewWorker(cfgEmpty)
+	if err != nil {
+		t.Fatalf("unexpected error creating worker: %v", err)
+	}
 	if len(workerEmpty.apiClients) != 0 {
 		t.Errorf("NewWorker() with empty URLs created %d API clients, expected 0", len(workerEmpty.apiClients))
 	}
 
 	// Test with nil config
-	workerNil := NewWorker(nil)
+	workerNil, err := NewWorker(nil)
+	if err != nil {
+		t.Fatalf("unexpected error creating worker: %v", err)
+	}
 	if len(workerNil.apiClients) != 0 {
 		t.Errorf("NewWorker() with nil config created %d API clients, expected 0", len(workerNil.apiClients))
 	}
@@ -494,7 +550,10 @@ func TestWorker_fetchProbeList_NoAPIClients(t *testing.T) {
 		APIURLs:         []string{}, // No API URLs
 	}
 
-	worker := NewWorker(cfg)
+	worker, err := NewWorker(cfg)
+	if err != nil {
+		t.Fatalf("unexpected error creating worker: %v", err)
+	}
 	ctx := context.Background()
 
 	probes, err := worker.fetchProbeList(ctx)
@@ -533,7 +592,10 @@ func TestWorker_updateProbeStatus_MultipleClients(t *testing.T) {
 		APIURLs:         []string{successServer.URL + "/api/metrics/v1/test/probes", failureServer.URL + "/api/metrics/v1/test/probes", successServer.URL + "/api/metrics/v1/test/probes"},
 	}
 
-	worker := NewWorker(cfg)
+	worker, err := NewWorker(cfg)
+	if err != nil {
+		t.Fatalf("unexpected error creating worker: %v", err)
+	}
 
 	// Test updateProbeStatus with mixed success/failure
 	// This function doesn't return an error, but logs the results
@@ -556,7 +618,10 @@ func TestNewWorker_EdgeCases(t *testing.T) {
 		APIURLs:         []string{"https://api1.example.com/api/metrics/v1/test/probes", "", "https://api3.example.com/api/metrics/v1/test/probes"},
 	}
 
-	worker := NewWorker(cfg)
+	worker, err := NewWorker(cfg)
+	if err != nil {
+		t.Fatalf("unexpected error creating worker: %v", err)
+	}
 	
 	// Should only create clients for non-empty URLs
 	if len(worker.apiClients) != 2 {
@@ -571,7 +636,10 @@ func TestNewWorker_EdgeCases(t *testing.T) {
 		Namespace:       "", // Empty namespace
 	}
 
-	workerDefault := NewWorker(cfgNoNamespace)
+	workerDefault, err := NewWorker(cfgNoNamespace)
+	if err != nil {
+		t.Fatalf("unexpected error creating worker: %v", err)
+	}
 	if workerDefault.probeManager == nil {
 		t.Error("NewWorker() should create probe manager even with empty namespace")
 	}

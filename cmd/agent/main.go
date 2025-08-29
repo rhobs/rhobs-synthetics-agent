@@ -47,7 +47,11 @@ func main() {
 			// Reinitialize logger with viper configuration to catch the log level flag
 			logger.ReinitLogger()
 
-			agent := agent.New(cfg)
+			agent, err := agent.New(cfg)
+			if err != nil {
+				return fmt.Errorf("failed to initialize agent: %w", err)
+			}
+
 			return agent.Run()
 		},
 	}

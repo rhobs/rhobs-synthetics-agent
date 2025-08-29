@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/rhobs/rhobs-synthetics-agent/internal/k8s"
 	"github.com/spf13/viper"
 )
 
@@ -24,14 +25,7 @@ type Config struct {
 	Namespace       string `mapstructure:"namespace"`
 	
 	// Blackbox Configuration
-	Blackbox BlackboxConfig `mapstructure:"blackbox"`
-}
-
-// BlackboxConfig holds configuration for blackbox exporter probes
-type BlackboxConfig struct {
-	Interval  string `mapstructure:"interval"`
-	Module    string `mapstructure:"module"`
-	ProberURL string `mapstructure:"prober_url"`
+	Blackbox k8s.BlackboxConfig `mapstructure:"blackbox"`
 }
 
 // GetAPIURLs returns the list of complete API URLs
@@ -56,11 +50,8 @@ func LoadConfig() (*Config, error) {
 	viper.SetDefault("jwt_token", "")
 	viper.SetDefault("kube_config", "")
 	viper.SetDefault("namespace", "default")
-	
-	// Blackbox defaults
-	viper.SetDefault("blackbox.interval", "30s")
-	viper.SetDefault("blackbox.module", "http_2xx")
-	viper.SetDefault("blackbox.prober_url", "http://blackbox-exporter:9115")
+
+	k8s.LoadBlackboxDefaults()
 
 	viper.AutomaticEnv()
 
