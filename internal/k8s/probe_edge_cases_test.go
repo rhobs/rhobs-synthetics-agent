@@ -103,7 +103,7 @@ func TestProbeManager_CreateProbeResource_MissingLabels(t *testing.T) {
 		Status:    "pending",
 	}
 
-	probeConfig := ProbeConfig{
+	probeConfig := BlackboxProbingConfig{
 		Interval:  "30s",
 		Module:    "http_2xx",
 		ProberURL: "http://blackbox-exporter:9115",
@@ -144,7 +144,7 @@ func TestProbeManager_CreateProbeResource_PartialLabels(t *testing.T) {
 		Status: "pending",
 	}
 
-	probeConfig := ProbeConfig{
+	probeConfig := BlackboxProbingConfig{
 		Interval:  "30s",
 		Module:    "http_2xx",
 		ProberURL: "http://blackbox-exporter:9115",

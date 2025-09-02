@@ -30,7 +30,10 @@ func TestAgent_E2E_Metrics(t *testing.T) {
 	}
 
 	// Create and start agent
-	testAgent := agent.New(cfg)
+	testAgent, err := agent.New(cfg)
+	if err != nil {
+		t.Fatalf("failed to start test agent: %v", err)
+	}
 
 	// Run agent in background
 	var agentErr error
@@ -278,7 +281,10 @@ func TestAgent_E2E_MetricsWithAPIFailure(t *testing.T) {
 		LabelSelector:   "env=test",
 	}
 
-	testAgent := agent.New(cfg)
+	testAgent, err := agent.New(cfg)
+	if err != nil {
+		t.Fatalf("failed to start test agent: %v", err)
+	}
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -349,7 +355,10 @@ func TestAgent_E2E_MetricsStandaloneMode(t *testing.T) {
 		APIURLs:         []string{}, // No API URLs - standalone mode
 	}
 
-	testAgent := agent.New(cfg)
+	testAgent, err := agent.New(cfg)
+	if err != nil {
+		t.Fatalf("failed to start test agent: %v", err)
+	}
 
 	var wg sync.WaitGroup
 	wg.Add(1)
