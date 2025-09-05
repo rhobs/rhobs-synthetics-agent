@@ -65,7 +65,7 @@ func (c *Client) GetProbes(labelSelector string) ([]Probe, error) {
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	
+
 	// Add JWT token if configured
 	if c.JWTToken != "" {
 		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.JWTToken))
@@ -108,7 +108,7 @@ func (c *Client) UpdateProbeStatus(probeID, status string) error {
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	
+
 	// Add JWT token if configured
 	if c.JWTToken != "" {
 		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.JWTToken))
@@ -123,6 +123,38 @@ func (c *Client) UpdateProbeStatus(probeID, status string) error {
 	}()
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	return nil
+}
+
+// DeleteProbe deletes a probe from the API
+func (c *Client) DeleteProbe(probeID string) error {
+	reqURL := fmt.Sprintf("%s/%s", c.BaseURL, probeID)
+
+	req, err := http.NewRequest("DELETE", reqURL, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+
+	// Add JWT token if configured
+	if c.JWTToken != "" {
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.JWTToken))
+	}
+
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to execute request: %w", err)
+	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusNotFound {
 		body, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
 	}

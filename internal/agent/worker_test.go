@@ -369,13 +369,13 @@ func TestWorker_processProbe_K8sIntegration(t *testing.T) {
 
 	// This should not fail even when not in K8s cluster
 	// because it falls back to logging
-	err = worker.processProbe(ctx, probe)
+	err = worker.createProbe(ctx, probe)
 	if err != nil {
-		t.Errorf("processProbe() should not fail when falling back to logging: %v", err)
+		t.Errorf("createProbe() should not fail when falling back to logging: %v", err)
 	}
 }
 
-func TestWorker_processProbe_FallbackLogging(t *testing.T) {
+func TestWorker_createProbe_FallbackLogging(t *testing.T) {
 	cfg := &Config{
 		PollingInterval: 30 * time.Second,
 		GracefulTimeout: 30 * time.Second,
@@ -406,9 +406,9 @@ func TestWorker_processProbe_FallbackLogging(t *testing.T) {
 	}
 
 	// This should fail because URL validation fails
-	err = worker.processProbe(ctx, probe)
+	err = worker.createProbe(ctx, probe)
 	if err == nil {
-		t.Error("processProbe() should fail when URL validation fails")
+		t.Error("createProbe() should fail when URL validation fails")
 	}
 }
 
@@ -476,7 +476,7 @@ func TestWorker_deduplicateProbes(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := worker.deduplicateProbes(tt.probes)
-			
+
 			if len(result) != len(tt.expected) {
 				t.Errorf("deduplicateProbes() returned %d probes, expected %d", len(result), len(tt.expected))
 				return
@@ -615,7 +615,7 @@ func TestNewWorker_EdgeCases(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error creating worker: %v", err)
 	}
-	
+
 	// Should only create clients for non-empty URLs
 	if len(worker.apiClients) != 2 {
 		t.Errorf("NewWorker() created %d API clients, expected 2 (empty URL should be skipped)", len(worker.apiClients))
