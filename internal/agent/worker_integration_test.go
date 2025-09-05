@@ -21,7 +21,7 @@ func TestWorker_processProbe_Success(t *testing.T) {
 	defer validationServer.Close()
 
 	cfg := &Config{
-		APIURLs:        []string{"http://example.com/api/metrics/v1/test/probes"},
+		APIURLs:       []string{"http://example.com/api/metrics/v1/test/probes"},
 		LabelSelector: "test=true",
 		Namespace:     "monitoring",
 		Blackbox: k8s.BlackboxConfig{
@@ -50,15 +50,15 @@ func TestWorker_processProbe_Success(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	err = worker.processProbe(ctx, probe)
+	err = worker.createProbe(ctx, probe)
 	if err != nil {
-		t.Errorf("processProbe() failed: %v", err)
+		t.Errorf("createProbe() failed: %v", err)
 	}
 }
 
 func TestWorker_processProbe_ValidationFailure(t *testing.T) {
 	cfg := &Config{
-		APIURLs:        []string{"http://example.com/api/metrics/v1/test/probes"},
+		APIURLs:       []string{"http://example.com/api/metrics/v1/test/probes"},
 		LabelSelector: "test=true",
 		Namespace:     "monitoring",
 		Blackbox: k8s.BlackboxConfig{
@@ -87,9 +87,9 @@ func TestWorker_processProbe_ValidationFailure(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	err = worker.processProbe(ctx, probe)
+	err = worker.createProbe(ctx, probe)
 	if err == nil {
-		t.Error("processProbe() should fail for invalid URL")
+		t.Error("createProbe() should fail for invalid URL")
 	}
 }
 
@@ -133,7 +133,7 @@ func TestWorker_FullIntegration(t *testing.T) {
 	cfg := &Config{
 		PollingInterval: 100 * time.Millisecond,
 		GracefulTimeout: 1 * time.Second,
-		APIURLs:          []string{apiServer.URL + "/api/metrics/v1/test/probes"},
+		APIURLs:         []string{apiServer.URL + "/api/metrics/v1/test/probes"},
 		LabelSelector:   "test=true",
 		Namespace:       "monitoring",
 		Blackbox: k8s.BlackboxConfig{
@@ -199,7 +199,7 @@ func TestWorker_processProbes_WithValidConfig(t *testing.T) {
 	defer apiServer.Close()
 
 	cfg := &Config{
-		APIURLs:        []string{apiServer.URL + "/api/metrics/v1/test/probes"},
+		APIURLs:       []string{apiServer.URL + "/api/metrics/v1/test/probes"},
 		LabelSelector: "test=true",
 		Namespace:     "monitoring",
 		Blackbox: k8s.BlackboxConfig{

@@ -20,16 +20,16 @@ import (
 
 // ProbeManager handles the creation and management of probe Custom Resources
 type ProbeManager struct {
-	namespace      string
-	httpClient     *http.Client
-	kubeClient     *kubeclient.Client
-	probeAPIGroup  string // "monitoring.rhobs" or "monitoring.coreos.com" or ""
+	namespace     string
+	httpClient    *http.Client
+	kubeClient    *kubeclient.Client
+	probeAPIGroup string // "monitoring.rhobs" or "monitoring.coreos.com" or ""
 }
 
 // NewProbeManager creates a new probe manager
 func NewProbeManager(namespace, kubeconfigPath string) *ProbeManager {
 	pm := &ProbeManager{
-		namespace:  namespace,
+		namespace: namespace,
 		httpClient: &http.Client{
 			Timeout: 10 * time.Second,
 		},
@@ -190,6 +190,49 @@ func (pm *ProbeManager) CreateProbeK8sResource(probe api.Probe, config BlackboxP
 		return fmt.Errorf("failed to create Probe resource in Kubernetes: %w", err)
 	}
 
+	return nil
+}
+
+// DeleteProbeK8sResource deletes a Probe Custom Resource from Kubernetes
+func (pm *ProbeManager) DeleteProbeK8sResource(probe api.Probe) error {
+	// Check if we can interact with Kubernetes resources
+	if !pm.isK8sCluster() {
+		return fmt.Errorf("not running in a Kubernetes cluster")
+	}
+
+	if pm.probeAPIGroup == "" {
+		return fmt.Errorf("no compatible Probe CRDs found in cluster")
+	}
+
+	if pm.kubeClient == nil {
+		return fmt.Errorf("kubernetes client not available")
+	}
+
+	// Define the GVR for Probe resources
+	probeGVR := schema.GroupVersionResource{
+		Group:    pm.probeAPIGroup,
+		Version:  "v1",
+		Resource: "probes",
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Construct the probe name using the same pattern as in CreateProbeK8sResource
+	probeName := fmt.Sprintf("probe-%s", probe.ID)
+
+	// Delete the resource from Kubernetes
+	err := pm.kubeClient.DynamicClient().Resource(probeGVR).Namespace(pm.namespace).Delete(
+		ctx,
+		probeName,
+		metav1.DeleteOptions{},
+	)
+
+	if err != nil {
+		return fmt.Errorf("failed to delete Probe resource %s from Kubernetes: %w", probeName, err)
+	}
+
+	logger.Infof("Successfully deleted Probe resource %s from Kubernetes", probeName)
 	return nil
 }
 

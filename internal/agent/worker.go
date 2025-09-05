@@ -72,10 +72,10 @@ func NewWorker(cfg *Config) (*Worker, error) {
 	}
 
 	w := &Worker{
-		config:          cfg,
-		apiClients:      apiClients,
-		probeManager:    probeManager,
-		proberManager:   proberManager,
+		config:            cfg,
+		apiClients:        apiClients,
+		probeManager:      probeManager,
+		proberManager:     proberManager,
 		readinessCallback: func(bool) {}, // no-op by default
 	}
 	return w, nil
@@ -166,6 +166,13 @@ func (w *Worker) processProbes(ctx context.Context, taskWG *sync.WaitGroup, shut
 		return nil
 	}
 
+	logger.Infof("Fetching probe list from 1 API endpoints with label selector: private=false,rhobs-synthetics/status=terminating")
+	if err := w.deleteProbe(ctx); err != nil {
+		logger.Infof("error processing probes with status=terminating: %v", err)
+	} else {
+		logger.Infof("successfully processed probes with status=terminating")
+	}
+
 	// Fetch probe configurations from the API
 	probes, err := w.fetchProbeList(ctx)
 	if err != nil {
@@ -189,7 +196,7 @@ func (w *Worker) processProbes(ctx context.Context, taskWG *sync.WaitGroup, shut
 		default:
 		}
 
-		if err := w.processProbe(ctx, probe); err != nil {
+		if err := w.createProbe(ctx, probe); err != nil {
 			logger.Infof("Failed to process probe %s: %v", probe.ID, err)
 			// Update probe status to failed
 			w.updateProbeStatus(probe.ID, "failed")
@@ -230,7 +237,7 @@ func (w *Worker) fetchProbeList(ctx context.Context) ([]api.Probe, error) {
 		fetchStart := time.Now()
 		probes, err := apiClient.GetProbes(labelSelector)
 		fetchDuration := time.Since(fetchStart)
-		
+
 		apiEndpoint := fmt.Sprintf("endpoint_%d", i+1)
 		if err != nil {
 			logger.Infof("Failed to fetch probes from API endpoint %d: %v", i+1, err)
@@ -293,8 +300,8 @@ func (w *Worker) updateProbeStatus(probeID, status string) {
 	}
 }
 
-// processProbe creates a Custom Resource for a single probe
-func (w *Worker) processProbe(ctx context.Context, probe api.Probe) error {
+// createProbe creates a Custom Resource for a single probe
+func (w *Worker) createProbe(ctx context.Context, probe api.Probe) error {
 	logger.Infof("Processing probe %s with target URL: %s", probe.ID, probe.StaticURL)
 
 	// Try to create the probe Custom Resource in Kubernetes
@@ -342,7 +349,7 @@ func (w *Worker) processProbers(ctx context.Context, shutdownChan chan struct{})
 	return nil
 }
 
-func (w *Worker) getProberShards() ([]string) {
+func (w *Worker) getProberShards() []string {
 	return []string{"default"}
 }
 
@@ -360,5 +367,27 @@ func (w *Worker) manageProber(ctx context.Context, name string) error {
 		logger.Infof("new prober %q for %q created successfully", prober, name)
 	}
 	logger.Debugf("prober: %#v", prober)
+	return nil
+}
+
+func (w *Worker) deleteProbe(ctx context.Context) error {
+	logger.Infof("Checking for probes waiting to be deleted")
+	originalSelector := w.config.LabelSelector
+	w.config.LabelSelector = "private=false,rhobs-synthetics/status=terminating"
+	defer func() { w.config.LabelSelector = originalSelector }()
+	probes, err := w.fetchProbeList(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to fetch probe list: %w", err)
+	}
+	logger.Infof("Found %d probes waiting to be deleted", len(probes))
+	for _, probe := range probes {
+		if probe.Status == "terminating" {
+			logger.Infof("Deleting probe %s with target URL: %s", probe.ID, probe.StaticURL)
+			err := w.probeManager.DeleteProbeK8sResource(probe)
+			if err != nil {
+				return fmt.Errorf("failed to delete probe %s: %w", probe.ID, err)
+			}
+		}
+	}
 	return nil
 }
