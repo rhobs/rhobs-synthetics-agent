@@ -381,12 +381,14 @@ func (w *Worker) deleteProbe(ctx context.Context) error {
 	}
 	logger.Infof("Found %d probes waiting to be deleted", len(probes))
 	for _, probe := range probes {
-		if probe.Status == "terminating" {
-			logger.Infof("Deleting probe %s with target URL: %s", probe.ID, probe.StaticURL)
-			err := w.probeManager.DeleteProbeK8sResource(probe)
-			if err != nil {
-				return fmt.Errorf("failed to delete probe %s: %w", probe.ID, err)
-			}
+		logger.Infof("Deleting probe %s with target URL: %s", probe.ID, probe.StaticURL)
+		err := w.probeManager.DeleteProbeK8sResource(probe)
+		if err != nil {
+			return fmt.Errorf("failed to delete CR for probe %s: %w", probe.ID, err)
+		}
+		err = w.apiClients[0].DeleteProbe(probe.ID)
+		if err != nil {
+			return fmt.Errorf("failed to delete probe %s configuration from API database: %w", probe.ID, err)
 		}
 	}
 	return nil
