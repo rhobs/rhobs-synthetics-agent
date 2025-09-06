@@ -398,7 +398,7 @@ func TestWorker_processProbe_FallbackLogging(t *testing.T) {
 	// Test with an invalid URL to trigger URL validation failure
 	probe := api.Probe{
 		ID:        "test-probe-invalid",
-		StaticURL: "https://non-existent-domain-12345.com",
+		StaticURL: "invalid-url-format",
 		Labels: map[string]string{
 			"cluster_id": "test-cluster",
 		},

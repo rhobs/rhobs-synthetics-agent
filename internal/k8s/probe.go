@@ -40,7 +40,10 @@ func NewProbeManager(namespace, kubeconfigPath string) *ProbeManager {
 	return pm
 }
 
-// ValidateURL checks if a URL is ready to be monitored
+// ValidateURL checks if a URL has valid format and scheme
+// Note: We only validate format and scheme, not connectivity, as URLs may be
+// temporarily unreachable during deployment or due to transient network issues.
+// The blackbox exporter will handle the actual connectivity monitoring.
 func (pm *ProbeManager) ValidateURL(targetURL string) error {
 	parsedURL, err := url.Parse(targetURL)
 	if err != nil {
@@ -51,24 +54,8 @@ func (pm *ProbeManager) ValidateURL(targetURL string) error {
 		return fmt.Errorf("unsupported URL scheme: %s", parsedURL.Scheme)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	req, err := http.NewRequestWithContext(ctx, "HEAD", targetURL, nil)
-	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
-	}
-
-	resp, err := pm.httpClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("URL validation failed: %w", err)
-	}
-	defer func() {
-		_ = resp.Body.Close()
-	}()
-
-	if resp.StatusCode >= 500 {
-		return fmt.Errorf("URL validation failed with server error: %d", resp.StatusCode)
+	if parsedURL.Host == "" {
+		return fmt.Errorf("URL must have a host")
 	}
 
 	return nil

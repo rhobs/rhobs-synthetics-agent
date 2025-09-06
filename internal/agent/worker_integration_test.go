@@ -78,7 +78,7 @@ func TestWorker_processProbe_ValidationFailure(t *testing.T) {
 	// Probe with invalid URL
 	probe := api.Probe{
 		ID:        "test-probe-invalid",
-		StaticURL: "https://non-existent-domain-12345.com",
+		StaticURL: "invalid-url-format",
 		Labels: map[string]string{
 			"cluster_id": "cluster-123",
 			"private":    "false",
