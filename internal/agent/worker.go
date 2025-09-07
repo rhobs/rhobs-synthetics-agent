@@ -11,6 +11,7 @@ import (
 	"github.com/rhobs/rhobs-synthetics-agent/internal/k8s"
 	"github.com/rhobs/rhobs-synthetics-agent/internal/logger"
 	"github.com/rhobs/rhobs-synthetics-agent/internal/metrics"
+	"github.com/rhobs/rhobs-synthetics-api/pkg/kubeclient"
 )
 
 const defaultProbeNamespace = "default"
@@ -64,7 +65,7 @@ func NewWorker(cfg *Config) (*Worker, error) {
 	probeManager := k8s.NewProbeManager(namespace, kubeConfigPath)
 	var proberManager k8s.ProberManager
 	var err error
-	if kubeConfigPath != "" {
+	if kubeConfigPath != "" || kubeclient.IsRunningInK8sCluster() {
 		proberManager, err = k8s.NewBlackBoxProberManager(namespace, kubeConfigPath, blackboxDeploymentCfg)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create prober manager: %w", err)

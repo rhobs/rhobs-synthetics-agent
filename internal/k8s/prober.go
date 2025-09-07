@@ -47,9 +47,6 @@ type BlackBoxProberManager struct {
 
 //func NewBlackBoxProberManager(namespace string, kubeconfigPath string, opts... BlackBoxProberOption) (*BlackBoxProberManager, error) {
 func NewBlackBoxProberManager(namespace string, kubeconfigPath string, cfg BlackboxDeploymentConfig) (*BlackBoxProberManager, error) {
-	if kubeconfigPath == "" {
-		return nil, fmt.Errorf("kubeconfig path must be specified")
-	}
 	client, err := kubeclient.NewClient(kubeclient.Config{KubeconfigPath: kubeconfigPath})
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize Kubernetes client: %w", err)
