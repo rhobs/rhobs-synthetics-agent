@@ -46,6 +46,8 @@ func TestProbeManager_CreateProbeResource(t *testing.T) {
 	defer server.Close()
 
 	pm := NewProbeManager("monitoring", "")
+	// Set API group for testing - test with monitoring.rhobs which should be preferred
+	pm.SetProbeAPIGroup("monitoring.rhobs")
 
 	probe := api.Probe{
 		ID:        "test-probe-1",
@@ -70,8 +72,8 @@ func TestProbeManager_CreateProbeResource(t *testing.T) {
 	}
 
 	// Verify the Custom Resource structure
-	if cr.APIVersion != "monitoring.coreos.com/v1" {
-		t.Errorf("Expected APIVersion 'monitoring.coreos.com/v1', got %s", cr.APIVersion)
+	if cr.APIVersion != "monitoring.rhobs/v1" {
+		t.Errorf("Expected APIVersion 'monitoring.rhobs/v1', got %s", cr.APIVersion)
 	}
 
 	if cr.Kind != "Probe" {
@@ -144,6 +146,42 @@ func TestProbeManager_isRunningInK8sCluster(t *testing.T) {
 		t.Log("Running in actual Kubernetes environment - this is expected if tests are run in a K8s pod")
 	} else {
 		t.Log("Not running in Kubernetes environment - this is expected for local testing")
+	}
+}
+
+func TestProbeManager_APIVersionFallback(t *testing.T) {
+	// Create a test server that returns 200 OK for URL validation
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	pm := NewProbeManager("monitoring", "")
+	// Don't set probeAPIGroup, should fallback to monitoring.coreos.com
+
+	probe := api.Probe{
+		ID:        "test-probe-fallback",
+		StaticURL: server.URL,
+		Labels: map[string]string{
+			"cluster_id": "cluster-123",
+		},
+		Status: "pending",
+	}
+
+	probeConfig := BlackboxProbingConfig{
+		Interval:  "30s",
+		Module:    "http_2xx",
+		ProberURL: "http://blackbox-exporter:9115",
+	}
+
+	cr, err := pm.CreateProbeResource(probe, probeConfig)
+	if err != nil {
+		t.Fatalf("CreateProbeResource() failed: %v", err)
+	}
+
+	// Should fallback to monitoring.coreos.com when probeAPIGroup is empty
+	if cr.APIVersion != "monitoring.coreos.com/v1" {
+		t.Errorf("Expected fallback APIVersion 'monitoring.coreos.com/v1', got %s", cr.APIVersion)
 	}
 }
 

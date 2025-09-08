@@ -20,16 +20,16 @@ import (
 
 // ProbeManager handles the creation and management of probe Custom Resources
 type ProbeManager struct {
-	namespace      string
-	httpClient     *http.Client
-	kubeClient     *kubeclient.Client
-	probeAPIGroup  string // "monitoring.rhobs" or "monitoring.coreos.com" or ""
+	namespace     string
+	httpClient    *http.Client
+	kubeClient    *kubeclient.Client
+	probeAPIGroup string // "monitoring.rhobs" or "monitoring.coreos.com" or ""
 }
 
 // NewProbeManager creates a new probe manager
 func NewProbeManager(namespace, kubeconfigPath string) *ProbeManager {
 	pm := &ProbeManager{
-		namespace:  namespace,
+		namespace: namespace,
 		httpClient: &http.Client{
 			Timeout: 10 * time.Second,
 		},
@@ -130,6 +130,11 @@ func (pm *ProbeManager) checkProbeCRDs() {
 	logger.Errorf("No compatible Probe CRDs found in cluster")
 }
 
+// SetProbeAPIGroup sets the API group for testing purposes
+func (pm *ProbeManager) SetProbeAPIGroup(apiGroup string) {
+	pm.probeAPIGroup = apiGroup
+}
+
 // CreateProbeK8sResource creates and applies a Probe Custom Resource to Kubernetes
 func (pm *ProbeManager) CreateProbeK8sResource(probe api.Probe, config BlackboxProbingConfig) error {
 	// Check if we can create Kubernetes resources
@@ -210,9 +215,15 @@ func (pm *ProbeManager) CreateProbeResource(probe api.Probe, config BlackboxProb
 	}
 
 	// Create the Probe Custom Resource using the actual CRD types
+	// Use detected API group, fallback to monitoring.coreos.com for backwards compatibility
+	apiGroup := pm.probeAPIGroup
+	if apiGroup == "" {
+		apiGroup = "monitoring.coreos.com"
+	}
+	apiVersion := fmt.Sprintf("%s/v1", apiGroup)
 	probeResource := &monitoringv1.Probe{
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: "monitoring.coreos.com/v1",
+			APIVersion: apiVersion,
 			Kind:       "Probe",
 		},
 		ObjectMeta: metav1.ObjectMeta{
