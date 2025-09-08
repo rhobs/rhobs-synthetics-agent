@@ -19,8 +19,8 @@ func TestClient_GetProbes(t *testing.T) {
 		}
 
 		labelSelector := r.URL.Query().Get("label_selector")
-		if labelSelector != "private=false,rhobs-synthetics/status=pending" {
-			t.Errorf("Expected label selector 'private=false,rhobs-synthetics/status=pending', got %s", labelSelector)
+		if labelSelector != "private=false," {
+			t.Errorf("Expected label selector 'private=false,', got %s", labelSelector)
 		}
 
 		// Return sample probes
@@ -55,7 +55,7 @@ func TestClient_GetProbes(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL+"/api/metrics/v1/test-tenant/probes", "")
-	probes, err := client.GetProbes("private=false,rhobs-synthetics/status=pending")
+	probes, err := client.GetProbes("private=false,")
 
 	if err != nil {
 		t.Fatalf("GetProbes() failed: %v", err)

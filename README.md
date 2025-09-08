@@ -59,7 +59,7 @@ make lint-ci
 
 1. **Poll APIs**: Retrieves probe configurations from multiple `/api/metrics/v1/{tenant}/probes` endpoints
 2. **Deduplicate**: Removes duplicate probes by URL when multiple APIs return probes monitoring the same endpoint
-3. **Filter Probes**: Uses label selectors (e.g., `private=false,rhobs-synthetics/status=pending`)
+3. **Filter Probes**: Uses label selectors (e.g., `private=false,`)
 4. **Validate URLs**: Checks if target URLs are ready for monitoring
 5. **Create Resources**: Generates Probe Custom Resources (auto-detects API group)
 6. **Update Status**: Reports success/failure back to all relevant APIs via PATCH calls
@@ -69,7 +69,7 @@ make lint-ci
 The agent uses configurable label selectors to filter probes:
 ```bash
 # Example: Only process non-private, pending probes
-LABEL_SELECTOR="private=false,rhobs-synthetics/status=pending"
+LABEL_SELECTOR="private=false,"
 ```
 
 ### URL Validation
@@ -97,7 +97,7 @@ api_base_urls:
   - "https://observatorium-api-3.example.com"
 
 api_tenant: "my-rhobs-tenant"
-label_selector: "private=false,rhobs-synthetics/status=pending"
+label_selector: "private=false,"
 
 # Kubernetes Configuration  
 namespace: "monitoring"
@@ -114,7 +114,7 @@ export GRACEFUL_TIMEOUT=60s
 
 # API configuration - comma-separated list of complete URLs
 export API_URLS="https://api1.example.com/api/metrics/v1/my-rhobs-tenant/probes,https://api2.example.com/api/metrics/v1/my-rhobs-tenant/probes,https://api3.example.com/api/metrics/v1/my-rhobs-tenant/probes"
-export LABEL_SELECTOR="private=false,rhobs-synthetics/status=pending"
+export LABEL_SELECTOR="private=false,"
 
 # Kubernetes settings
 export NAMESPACE="monitoring"

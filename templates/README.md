@@ -42,7 +42,7 @@ The following table lists the most important configurable parameters:
 |-----------|-------------|---------|
 | `NAMESPACE` | Namespace where the agent will be deployed | `"rhobs"` |
 | `API_URLS` | YAML list of complete API URLs to poll for probes | Single example URL |
-| `LABEL_SELECTOR` | Label selector for filtering probes | `"private=false,rhobs-synthetics/status=pending"` |
+| `LABEL_SELECTOR` | Label selector for filtering probes | `"private=false,"` |
 | `PROBE_NAMESPACE` | Namespace where probe resources will be created | `"rhobs"` |
 | `POLLING_INTERVAL` | How often to poll APIs | `"30s"` |
 | `LOG_LEVEL` | Log level (debug, info, warn, error) | `"info"` |

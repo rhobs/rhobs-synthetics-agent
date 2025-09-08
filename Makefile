@@ -119,7 +119,7 @@ example-config:
 		echo "  - \"https://observatorium-api-3.example.com\"" >> example-config.yaml; \
 		echo "" >> example-config.yaml; \
 		echo "api_tenant: \"default\"" >> example-config.yaml; \
-		echo "label_selector: \"private=false,rhobs-synthetics/status=pending\"" >> example-config.yaml; \
+		echo "label_selector: \"private=false\"" >> example-config.yaml; \
 		echo "" >> example-config.yaml; \
 		echo "# Kubernetes Configuration" >> example-config.yaml; \
 		echo "namespace: \"monitoring\"" >> example-config.yaml; \
