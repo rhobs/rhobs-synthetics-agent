@@ -257,17 +257,32 @@ func TestNewBlackBoxProberManager(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Note: This will fail in test environment since we don't have actual K8s credentials
-			// but we can test that it attempts to create the manager correctly
 			manager, err := NewBlackBoxProberManager(tt.namespace, "", cfg)
 
-			// Expected to fail with kubeclient creation error in test environment
-			if err == nil {
-				t.Error("Expected error when creating manager without valid kubeconfig")
-			}
+			// The test can succeed OR fail depending on environment:
+			// - In local environment: kubeclient creation fails, manager is nil
+			// - In K8s environment (CI): kubeclient creation succeeds, manager is created
 
-			if manager != nil {
-				t.Error("Expected nil manager when kubeclient creation fails")
+			if err != nil {
+				// Test environment without K8s access - expected failure
+				if manager != nil {
+					t.Error("Expected nil manager when kubeclient creation fails")
+				}
+				t.Logf("Running in non-K8s environment: %v", err)
+			} else {
+				// K8s environment with valid credentials - successful creation
+				if manager == nil {
+					t.Error("Expected non-nil manager when kubeclient creation succeeds")
+				} else {
+					// Verify the manager was configured correctly
+					if manager.namespace != tt.expectedNamespace {
+						t.Errorf("Expected namespace '%s', got '%s'", tt.expectedNamespace, manager.namespace)
+					}
+					if manager.cfg.Image != cfg.Image {
+						t.Errorf("Expected image '%s', got '%s'", cfg.Image, manager.cfg.Image)
+					}
+				}
+				t.Logf("Running in K8s environment - manager created successfully")
 			}
 		})
 	}

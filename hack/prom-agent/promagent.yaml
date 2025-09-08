@@ -1,0 +1,35 @@
+apiVersion: monitoring.rhobs/v1alpha1
+kind: PrometheusAgent
+metadata:
+  name: prometheus-agent-instance
+  # namespace: rhobs-int
+  namespace: openshift-operators
+spec:
+  # The image and tag to use for the Prometheus Agent container
+  image: prom/prometheus:v2.47.1
+
+  # The Thanos endpoint for remote-write
+  remoteWrite:
+  - url: 'http://thanos-receive-router-rhobs.rhobs-int.svc.cluster.local:19291/api/v1/write'
+
+  # The retention period for the agent's TSDB
+  retention: "12h"
+
+  # The resources for the agent's container
+  resources:
+    requests:
+      cpu: 500m
+      memory: 500M
+    limits:
+      cpu: 1
+      memory: 1Gi
+
+  # Use the built-in Probe discovery
+  probeSelector:
+    matchLabels:
+      rhobs.monitoring/managed-by: rhobs-synthetics-agent
+
+  # Optional, but good practice to limit the namespaces for discovery
+  probeNamespaceSelector:
+    matchNames:
+      - rhobs-int
