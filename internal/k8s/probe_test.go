@@ -157,7 +157,8 @@ func TestProbeManager_APIVersionFallback(t *testing.T) {
 	defer server.Close()
 
 	pm := NewProbeManager("monitoring", "")
-	// Don't set probeAPIGroup, should fallback to monitoring.coreos.com
+	// Force empty probeAPIGroup to test fallback behavior
+	pm.SetProbeAPIGroup("")
 
 	probe := api.Probe{
 		ID:        "test-probe-fallback",
