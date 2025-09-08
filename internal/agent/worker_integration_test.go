@@ -21,14 +21,14 @@ func TestWorker_processProbe_Success(t *testing.T) {
 	defer validationServer.Close()
 
 	cfg := &Config{
-		APIURLs:        []string{"http://example.com/api/metrics/v1/test/probes"},
+		APIURLs:       []string{"http://example.com/api/metrics/v1/test/probes"},
 		LabelSelector: "test=true",
 		Namespace:     "monitoring",
 		Blackbox: k8s.BlackboxConfig{
 			Probing: k8s.BlackboxProbingConfig{
 				Interval:  "30s",
 				Module:    "http_2xx",
-				ProberURL: "http://blackbox-exporter:9115",
+				ProberURL: "http://synthetics-blackbox-prober-default:9115",
 			},
 		},
 	}
@@ -58,14 +58,14 @@ func TestWorker_processProbe_Success(t *testing.T) {
 
 func TestWorker_processProbe_ValidationFailure(t *testing.T) {
 	cfg := &Config{
-		APIURLs:        []string{"http://example.com/api/metrics/v1/test/probes"},
+		APIURLs:       []string{"http://example.com/api/metrics/v1/test/probes"},
 		LabelSelector: "test=true",
 		Namespace:     "monitoring",
 		Blackbox: k8s.BlackboxConfig{
 			Probing: k8s.BlackboxProbingConfig{
 				Interval:  "30s",
 				Module:    "http_2xx",
-				ProberURL: "http://blackbox-exporter:9115",
+				ProberURL: "http://synthetics-blackbox-prober-default:9115",
 			},
 		},
 	}
@@ -133,14 +133,14 @@ func TestWorker_FullIntegration(t *testing.T) {
 	cfg := &Config{
 		PollingInterval: 100 * time.Millisecond,
 		GracefulTimeout: 1 * time.Second,
-		APIURLs:          []string{apiServer.URL + "/api/metrics/v1/test/probes"},
+		APIURLs:         []string{apiServer.URL + "/api/metrics/v1/test/probes"},
 		LabelSelector:   "test=true",
 		Namespace:       "monitoring",
 		Blackbox: k8s.BlackboxConfig{
 			Probing: k8s.BlackboxProbingConfig{
 				Interval:  "30s",
 				Module:    "http_2xx",
-				ProberURL: "http://blackbox-exporter:9115",
+				ProberURL: "http://synthetics-blackbox-prober-default:9115",
 			},
 		},
 	}
@@ -199,14 +199,14 @@ func TestWorker_processProbes_WithValidConfig(t *testing.T) {
 	defer apiServer.Close()
 
 	cfg := &Config{
-		APIURLs:        []string{apiServer.URL + "/api/metrics/v1/test/probes"},
+		APIURLs:       []string{apiServer.URL + "/api/metrics/v1/test/probes"},
 		LabelSelector: "test=true",
 		Namespace:     "monitoring",
 		Blackbox: k8s.BlackboxConfig{
 			Probing: k8s.BlackboxProbingConfig{
 				Interval:  "30s",
 				Module:    "http_2xx",
-				ProberURL: "http://blackbox-exporter:9115",
+				ProberURL: "http://synthetics-blackbox-prober-default:9115",
 			},
 		},
 	}

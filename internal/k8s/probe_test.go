@@ -63,7 +63,7 @@ func TestProbeManager_CreateProbeResource(t *testing.T) {
 	probeConfig := BlackboxProbingConfig{
 		Interval:  "30s",
 		Module:    "http_2xx",
-		ProberURL: "http://blackbox-exporter:9115",
+		ProberURL: "http://synthetics-blackbox-prober-default:9115",
 	}
 
 	cr, err := pm.CreateProbeResource(probe, probeConfig)
@@ -128,7 +128,7 @@ func TestProbeManager_CreateProbeResource_InvalidURL(t *testing.T) {
 	probeConfig := BlackboxProbingConfig{
 		Interval:  "30s",
 		Module:    "http_2xx",
-		ProberURL: "http://blackbox-exporter:9115",
+		ProberURL: "http://synthetics-blackbox-prober-default:9115",
 	}
 
 	_, err := pm.CreateProbeResource(probe, probeConfig)
@@ -172,7 +172,7 @@ func TestProbeManager_APIVersionFallback(t *testing.T) {
 	probeConfig := BlackboxProbingConfig{
 		Interval:  "30s",
 		Module:    "http_2xx",
-		ProberURL: "http://blackbox-exporter:9115",
+		ProberURL: "http://synthetics-blackbox-prober-default:9115",
 	}
 
 	cr, err := pm.CreateProbeResource(probe, probeConfig)
@@ -227,7 +227,7 @@ func TestProbeManager_CreateProbeK8sResource_NotInCluster(t *testing.T) {
 	probeConfig := BlackboxProbingConfig{
 		Interval:  "30s",
 		Module:    "http_2xx",
-		ProberURL: "http://blackbox-exporter:9115",
+		ProberURL: "http://synthetics-blackbox-prober-default:9115",
 	}
 
 	// This should fail either because we're not in a K8s cluster OR due to permissions

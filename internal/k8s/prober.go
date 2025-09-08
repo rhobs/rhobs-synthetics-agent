@@ -8,6 +8,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	kerr "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/dynamic"
 
 	"github.com/rhobs/rhobs-synthetics-api/pkg/kubeclient"
@@ -33,6 +35,8 @@ const (
 	DefaultBlackBoxExporterImage = "quay.io/prometheus/blackbox-exporter:latest"
 	// DefaultBlackBoxProberManagerNamespace defines the namespace used if none is provided when creating a new BlackBoxProberManager.
 	DefaultBlackBoxProberManagerNamespace = "default"
+	// BlackBoxProberPrefix defines the prefix used to generate the name of a Prober
+	BlackBoxProberPrefix = "synthetics-blackbox-prober"
 )
 
 type BlackBoxProberManager struct {
@@ -45,7 +49,7 @@ type BlackBoxProberManager struct {
 	cfg BlackboxDeploymentConfig
 }
 
-//func NewBlackBoxProberManager(namespace string, kubeconfigPath string, opts... BlackBoxProberOption) (*BlackBoxProberManager, error) {
+// func NewBlackBoxProberManager(namespace string, kubeconfigPath string, opts... BlackBoxProberOption) (*BlackBoxProberManager, error) {
 func NewBlackBoxProberManager(namespace string, kubeconfigPath string, cfg BlackboxDeploymentConfig) (*BlackBoxProberManager, error) {
 	client, err := kubeclient.NewClient(kubeclient.Config{KubeconfigPath: kubeconfigPath})
 	if err != nil {
@@ -70,6 +74,17 @@ func (m *BlackBoxProberManager) deploymentClient() dynamic.ResourceInterface {
 	return m.kubeClient.DynamicClient().Resource(appsv1.SchemeGroupVersion.WithResource("deployments")).Namespace(m.namespace)
 }
 
+// serviceClient is a helper function to interact with corev1.Service objects in the namespace specified
+// in the BlackBoxProberManager's config
+func (m *BlackBoxProberManager) serviceClient() dynamic.ResourceInterface {
+	serviceGVR := schema.GroupVersionResource{
+		Group:    "",
+		Version:  "v1",
+		Resource: "services",
+	}
+	return m.kubeClient.DynamicClient().Resource(serviceGVR).Namespace(m.namespace)
+}
+
 func (m *BlackBoxProberManager) GetProber(ctx context.Context, name string) (p Prober, found bool, err error) {
 	deploymentName := m.proberDeploymentName(name)
 	unstruct, err := m.deploymentClient().Get(ctx, deploymentName, metav1.GetOptions{})
@@ -92,6 +107,7 @@ func (m *BlackBoxProberManager) GetProber(ctx context.Context, name string) (p P
 }
 
 func (m *BlackBoxProberManager) CreateProber(ctx context.Context, name string) (Prober, error) {
+	// Create deployment
 	deployment := m.buildProberDeployment(name)
 	unstructuredProber, err := convertToUnstructured(&deployment)
 	if err != nil {
@@ -107,6 +123,21 @@ func (m *BlackBoxProberManager) CreateProber(ctx context.Context, name string) (
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert unstructured object to deployment object: %w", err)
 	}
+
+	// Create service
+	service := m.buildProberService(name)
+	unstructuredService, err := convertToUnstructured(&service)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert service to unstructured object: %w", err)
+	}
+
+	_, err = m.serviceClient().Create(ctx, unstructuredService, metav1.CreateOptions{})
+	if err != nil {
+		// If service creation fails, we should still return the deployment result
+		// but log the error since the service is not critical for basic functionality
+		return result, fmt.Errorf("prober deployment created but service creation failed %q: %w", fmt.Sprintf("%s/%s", service.Namespace, service.Name), err)
+	}
+
 	return result, nil
 }
 
@@ -150,9 +181,48 @@ func (m *BlackBoxProberManager) buildProberDeployment(proberName string) appsv1.
 	return deployment
 }
 
+// buildProberService creates a Service for the BlackBoxProber deployment
+func (m *BlackBoxProberManager) buildProberService(proberName string) corev1.Service {
+	// Create labels that match the deployment selector
+	selectorLabels := map[string]string{BlackBoxProberManagerProberLabelKey: proberName}
+
+	// Create metadata labels
+	labels := m.proberCustomLabels()
+	labels[BlackBoxProberManagerProberLabelKey] = proberName
+	labels["app.kubernetes.io/name"] = "blackbox-exporter"
+	labels["app.kubernetes.io/instance"] = proberName
+
+	service := corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      m.proberServiceName(proberName),
+			Namespace: m.namespace,
+			Labels:    labels,
+		},
+		Spec: corev1.ServiceSpec{
+			Selector: selectorLabels,
+			Ports: []corev1.ServicePort{
+				{
+					Name:       "http",
+					Protocol:   corev1.ProtocolTCP,
+					Port:       9115,
+					TargetPort: intstr.FromInt(9115),
+				},
+			},
+			Type: corev1.ServiceTypeClusterIP,
+		},
+	}
+
+	return service
+}
+
 // proberDeploymentName generates the standardized name for a BlackBoxProber's deployment
 func (m *BlackBoxProberManager) proberDeploymentName(name string) string {
-	return fmt.Sprintf("synthetics-agent-%s", name)
+	return fmt.Sprintf("%s-%s", BlackBoxProberPrefix, name)
+}
+
+// proberServiceName generates the standardized name for a BlackBoxProber's service
+func (m *BlackBoxProberManager) proberServiceName(name string) string {
+	return fmt.Sprintf("%s-%s-service", BlackBoxProberPrefix, name)
 }
 
 // proberCustomLabels retrieves the custom deployment labels specified by the BlackBoxProberManager's config.
@@ -167,7 +237,7 @@ func (m *BlackBoxProberManager) proberCustomLabels() map[string]string {
 }
 
 // Prober implementations define the operands which measure the availability of endpoints
-type Prober interface{
+type Prober interface {
 	String() string
 }
 

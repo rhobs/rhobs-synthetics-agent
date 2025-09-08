@@ -106,7 +106,7 @@ func TestProbeManager_CreateProbeResource_MissingLabels(t *testing.T) {
 	probeConfig := BlackboxProbingConfig{
 		Interval:  "30s",
 		Module:    "http_2xx",
-		ProberURL: "http://blackbox-exporter:9115",
+		ProberURL: "http://synthetics-blackbox-prober-default:9115",
 	}
 
 	cr, err := pm.CreateProbeResource(probe, probeConfig)
@@ -147,7 +147,7 @@ func TestProbeManager_CreateProbeResource_PartialLabels(t *testing.T) {
 	probeConfig := BlackboxProbingConfig{
 		Interval:  "30s",
 		Module:    "http_2xx",
-		ProberURL: "http://blackbox-exporter:9115",
+		ProberURL: "http://synthetics-blackbox-prober-default:9115",
 	}
 
 	cr, err := pm.CreateProbeResource(probe, probeConfig)
@@ -167,11 +167,11 @@ func TestProbeManager_CreateProbeResource_PartialLabels(t *testing.T) {
 
 func TestNewProbeManager(t *testing.T) {
 	pm := NewProbeManager("test-namespace", "")
-	
+
 	if pm.namespace != "test-namespace" {
 		t.Errorf("Expected namespace 'test-namespace', got %s", pm.namespace)
 	}
-	
+
 	if pm.httpClient == nil {
 		t.Error("httpClient should not be nil")
 	}
