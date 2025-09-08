@@ -347,7 +347,7 @@ func TestWorker_processProbe_K8sIntegration(t *testing.T) {
 			Probing: k8s.BlackboxProbingConfig{
 				Interval:  "30s",
 				Module:    "http_2xx",
-				ProberURL: "http://blackbox-exporter:9115",
+				ProberURL: "http://synthetics-blackbox-prober-default:9115",
 			},
 		},
 	}
@@ -384,7 +384,7 @@ func TestWorker_processProbe_FallbackLogging(t *testing.T) {
 			Probing: k8s.BlackboxProbingConfig{
 				Interval:  "30s",
 				Module:    "http_2xx",
-				ProberURL: "http://blackbox-exporter:9115",
+				ProberURL: "http://synthetics-blackbox-prober-default:9115",
 			},
 		},
 	}
@@ -476,7 +476,7 @@ func TestWorker_deduplicateProbes(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := worker.deduplicateProbes(tt.probes)
-			
+
 			if len(result) != len(tt.expected) {
 				t.Errorf("deduplicateProbes() returned %d probes, expected %d", len(result), len(tt.expected))
 				return
@@ -615,7 +615,7 @@ func TestNewWorker_EdgeCases(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error creating worker: %v", err)
 	}
-	
+
 	// Should only create clients for non-empty URLs
 	if len(worker.apiClients) != 2 {
 		t.Errorf("NewWorker() created %d API clients, expected 2 (empty URL should be skipped)", len(worker.apiClients))

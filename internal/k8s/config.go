@@ -23,7 +23,7 @@ type BlackboxDeploymentConfig struct {
 func LoadBlackboxDefaults() {
 	viper.SetDefault("blackbox.probing.interval", "30s")
 	viper.SetDefault("blackbox.probing.module", "http_2xx")
-	viper.SetDefault("blackbox.probing.prober_url", "http://blackbox-exporter:9115")
+	viper.SetDefault("blackbox.probing.prober_url", "http://synthetics-blackbox-prober-default:9115")
 
 	viper.SetDefault("blackbox.deployment.image", DefaultBlackBoxExporterImage)
 	viper.SetDefault("blackbox.deployment.command", []string{})

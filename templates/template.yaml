@@ -31,6 +31,14 @@ objects:
     - apiGroups: ["monitoring.coreos.com"]
       resources: ["probes"]
       verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+    # Access to create and manage Deployments for blackbox exporters
+    - apiGroups: ["apps"]
+      resources: ["deployments"]
+      verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+    # Access to create and manage Services for blackbox exporters
+    - apiGroups: [""]
+      resources: ["services"]
+      verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
     # Access to read existing CRDs to detect which API group is available
     - apiGroups: ["apiextensions.k8s.io"]
       resources: ["customresourcedefinitions"]
@@ -288,5 +296,5 @@ parameters:
 - name: BLACKBOX_PROBER_URL
   displayName: Blackbox Prober URL
   description: URL of the blackbox exporter prober
-  value: http://blackbox-exporter:9115
+  value: http://synthetics-blackbox-prober-default:9115
   required: true

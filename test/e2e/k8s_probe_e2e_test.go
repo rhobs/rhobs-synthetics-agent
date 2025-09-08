@@ -88,7 +88,7 @@ func TestAgent_E2E_KubernetesProbeCreation(t *testing.T) {
 		config := k8s.BlackboxProbingConfig{
 			Interval:  "30s",
 			Module:    "http_2xx",
-			ProberURL: "http://blackbox-exporter:9115",
+			ProberURL: "http://synthetics-blackbox-prober-default:9115",
 		}
 
 		// Create probe resource using the new CRD types
@@ -132,8 +132,8 @@ func TestAgent_E2E_KubernetesProbeCreation(t *testing.T) {
 			t.Errorf("Expected interval '30s', got %s", probeResource.Spec.Interval)
 		}
 
-		if probeResource.Spec.ProberSpec.URL != "http://blackbox-exporter:9115" {
-			t.Errorf("Expected prober URL 'http://blackbox-exporter:9115', got %s", probeResource.Spec.ProberSpec.URL)
+		if probeResource.Spec.ProberSpec.URL != "http://synthetics-blackbox-prober-default:9115" {
+			t.Errorf("Expected prober URL 'http://synthetics-blackbox-prober-default:9115', got %s", probeResource.Spec.ProberSpec.URL)
 		}
 
 		// Verify targets
@@ -180,7 +180,7 @@ func TestAgent_E2E_KubernetesProbeCreation(t *testing.T) {
 		config := k8s.BlackboxProbingConfig{
 			Interval:  "30s",
 			Module:    "http_2xx",
-			ProberURL: "http://blackbox-exporter:9115",
+			ProberURL: "http://synthetics-blackbox-prober-default:9115",
 		}
 
 		_, err := pm.CreateProbeResource(invalidProbe, config)
@@ -243,7 +243,7 @@ func TestAgent_E2E_KubernetesProbeWithFakeClient(t *testing.T) {
 		config := k8s.BlackboxProbingConfig{
 			Interval:  "30s",
 			Module:    "http_2xx",
-			ProberURL: "http://blackbox-exporter:9115",
+			ProberURL: "http://synthetics-blackbox-prober-default:9115",
 		}
 
 		// Create probe resource
@@ -321,8 +321,8 @@ func TestAgent_E2E_KubernetesProbeWithFakeClient(t *testing.T) {
 			t.Fatalf("Failed to get prober from spec: %v", err)
 		}
 
-		if prober["url"] != "http://blackbox-exporter:9115" {
-			t.Errorf("Expected prober URL 'http://blackbox-exporter:9115', got %s", prober["url"])
+		if prober["url"] != "http://synthetics-blackbox-prober-default:9115" {
+			t.Errorf("Expected prober URL 'http://synthetics-blackbox-prober-default:9115', got %s", prober["url"])
 		}
 
 		// Verify targets
@@ -393,7 +393,7 @@ func TestAgent_E2E_KubernetesProbeEdgeCases(t *testing.T) {
 			config: k8s.BlackboxProbingConfig{
 				Interval:  "60s",
 				Module:    "http_2xx",
-				ProberURL: "http://blackbox-exporter:9115",
+				ProberURL: "http://synthetics-blackbox-prober-default:9115",
 			},
 			expectError: false,
 		},
@@ -415,7 +415,7 @@ func TestAgent_E2E_KubernetesProbeEdgeCases(t *testing.T) {
 			config: k8s.BlackboxProbingConfig{
 				Interval:  "15s",
 				Module:    "http_2xx",
-				ProberURL: "http://blackbox-exporter:9115",
+				ProberURL: "http://synthetics-blackbox-prober-default:9115",
 			},
 			expectError: false,
 		},
@@ -430,7 +430,7 @@ func TestAgent_E2E_KubernetesProbeEdgeCases(t *testing.T) {
 			config: k8s.BlackboxProbingConfig{
 				Interval:  "30s",
 				Module:    "http_2xx",
-				ProberURL: "http://blackbox-exporter:9115",
+				ProberURL: "http://synthetics-blackbox-prober-default:9115",
 			},
 			expectError: true,
 			errorMsg:    "URL validation failed",
@@ -446,7 +446,7 @@ func TestAgent_E2E_KubernetesProbeEdgeCases(t *testing.T) {
 			config: k8s.BlackboxProbingConfig{
 				Interval:  "30s",
 				Module:    "http_2xx",
-				ProberURL: "http://blackbox-exporter:9115",
+				ProberURL: "http://synthetics-blackbox-prober-default:9115",
 			},
 			expectError: true,
 			errorMsg:    "unsupported URL scheme",
