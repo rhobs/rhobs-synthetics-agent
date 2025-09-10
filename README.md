@@ -166,7 +166,7 @@ metadata:
 spec:
   interval: "30s"
   module: "http_2xx"
-  prober_url: "http://synthetics-blackbox-prober-default:9115"
+  prober_url: "synthetics-blackbox-prober-default-service:9115"
   targets:
     staticConfig:
       static:
