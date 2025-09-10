@@ -66,17 +66,24 @@ func NewWorker(cfg *Config) (*Worker, error) {
 	var proberManager k8s.ProberManager
 	var err error
 	if kubeConfigPath != "" || kubeclient.IsRunningInK8sCluster() {
-		proberManager, err = k8s.NewBlackBoxProberManager(namespace, kubeConfigPath, blackboxDeploymentCfg)
+		// Create Prometheus resource configuration from config
+		prometheusResources := k8s.PrometheusResourceConfig{
+			CPURequests:    cfg.Prometheus.CPURequests,
+			CPULimits:      cfg.Prometheus.CPULimits,
+			MemoryRequests: cfg.Prometheus.MemoryRequests,
+			MemoryLimits:   cfg.Prometheus.MemoryLimits,
+		}
+		proberManager, err = k8s.NewBlackBoxProberManager(namespace, kubeConfigPath, blackboxDeploymentCfg, cfg.Prometheus.RemoteWriteURL, cfg.Prometheus.RemoteWriteTenant, prometheusResources)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create prober manager: %w", err)
 		}
 	}
 
 	w := &Worker{
-		config:          cfg,
-		apiClients:      apiClients,
-		probeManager:    probeManager,
-		proberManager:   proberManager,
+		config:            cfg,
+		apiClients:        apiClients,
+		probeManager:      probeManager,
+		proberManager:     proberManager,
 		readinessCallback: func(bool) {}, // no-op by default
 	}
 	return w, nil
@@ -231,7 +238,7 @@ func (w *Worker) fetchProbeList(ctx context.Context) ([]api.Probe, error) {
 		fetchStart := time.Now()
 		probes, err := apiClient.GetProbes(labelSelector)
 		fetchDuration := time.Since(fetchStart)
-		
+
 		apiEndpoint := fmt.Sprintf("endpoint_%d", i+1)
 		if err != nil {
 			logger.Infof("Failed to fetch probes from API endpoint %d: %v", i+1, err)
@@ -343,7 +350,7 @@ func (w *Worker) processProbers(ctx context.Context, shutdownChan chan struct{})
 	return nil
 }
 
-func (w *Worker) getProberShards() ([]string) {
+func (w *Worker) getProberShards() []string {
 	return []string{"default"}
 }
 

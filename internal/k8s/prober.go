@@ -22,6 +22,12 @@ type ProberManager interface {
 	CreateProber(ctx context.Context, name string) (p Prober, err error)
 	// DeleteProber removes a Prober with the given name
 	DeleteProber(ctx context.Context, name string) (err error)
+	// GetPrometheus retrieves the Prometheus instance for this manager
+	GetPrometheus(ctx context.Context) (found bool, err error)
+	// CreatePrometheus creates a Prometheus instance for synthetic monitoring
+	CreatePrometheus(ctx context.Context) (err error)
+	// DeletePrometheus removes the Prometheus instance
+	DeletePrometheus(ctx context.Context) (err error)
 }
 
 const (
@@ -37,6 +43,14 @@ const (
 	DefaultBlackBoxProberManagerNamespace = "default"
 	// BlackBoxProberPrefix defines the prefix used to generate the name of a Prober
 	BlackBoxProberPrefix = "synthetics-blackbox-prober"
+	// PrometheusResourceName defines the name of the Prometheus instance for synthetic monitoring
+	PrometheusResourceName = "synthetics-agent"
+	// PrometheusAPIVersion defines the API version for Prometheus CRD
+	PrometheusAPIVersion = "monitoring.rhobs/v1"
+	// PrometheusKind defines the Kind for Prometheus resources
+	PrometheusKind = "Prometheus"
+	// SyntheticsAgentManagedByValue defines the value for rhobs.monitoring/managed-by labels
+	SyntheticsAgentManagedByValue = "rhobs-synthetics-agent"
 )
 
 type BlackBoxProberManager struct {
@@ -47,10 +61,24 @@ type BlackBoxProberManager struct {
 	// cfg defines the BlackBoxProberManager's configuration. All BlackBoxProbers managed by
 	// this BlackBoxProberManager will be subject to this configuration
 	cfg BlackboxDeploymentConfig
+	// remoteWriteURL defines the Thanos remote write endpoint URL for Prometheus configuration
+	remoteWriteURL string
+	// remoteWriteTenant defines the Thanos tenant identifier for remote write requests
+	remoteWriteTenant string
+	// prometheusResources defines the CPU and memory resource configuration for Prometheus
+	prometheusResources PrometheusResourceConfig
+}
+
+// PrometheusResourceConfig holds the resource configuration for Prometheus pods
+type PrometheusResourceConfig struct {
+	CPURequests    string
+	CPULimits      string
+	MemoryRequests string
+	MemoryLimits   string
 }
 
 // func NewBlackBoxProberManager(namespace string, kubeconfigPath string, opts... BlackBoxProberOption) (*BlackBoxProberManager, error) {
-func NewBlackBoxProberManager(namespace string, kubeconfigPath string, cfg BlackboxDeploymentConfig) (*BlackBoxProberManager, error) {
+func NewBlackBoxProberManager(namespace string, kubeconfigPath string, cfg BlackboxDeploymentConfig, remoteWriteURL string, remoteWriteTenant string, prometheusResources PrometheusResourceConfig) (*BlackBoxProberManager, error) {
 	client, err := kubeclient.NewClient(kubeclient.Config{KubeconfigPath: kubeconfigPath})
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize Kubernetes client: %w", err)
@@ -60,10 +88,17 @@ func NewBlackBoxProberManager(namespace string, kubeconfigPath string, cfg Black
 		namespace = DefaultBlackBoxProberManagerNamespace
 	}
 
+	if remoteWriteURL == "" {
+		remoteWriteURL = fmt.Sprintf("http://thanos-receive-router-rhobs.%s.svc.cluster.local:19291/api/v1/receive", namespace)
+	}
+
 	manager := &BlackBoxProberManager{
-		kubeClient: client,
-		namespace:  namespace,
-		cfg:        cfg,
+		kubeClient:          client,
+		namespace:           namespace,
+		cfg:                 cfg,
+		remoteWriteURL:      remoteWriteURL,
+		remoteWriteTenant:   remoteWriteTenant,
+		prometheusResources: prometheusResources,
 	}
 	return manager, nil
 }
@@ -83,6 +118,16 @@ func (m *BlackBoxProberManager) serviceClient() dynamic.ResourceInterface {
 		Resource: "services",
 	}
 	return m.kubeClient.DynamicClient().Resource(serviceGVR).Namespace(m.namespace)
+}
+
+// prometheusClient is a helper function to interact with monitoring.rhobs/v1 Prometheus objects
+func (m *BlackBoxProberManager) prometheusClient() dynamic.ResourceInterface {
+	prometheusGVR := schema.GroupVersionResource{
+		Group:    "monitoring.rhobs",
+		Version:  "v1",
+		Resource: "prometheuses",
+	}
+	return m.kubeClient.DynamicClient().Resource(prometheusGVR).Namespace(m.namespace)
 }
 
 func (m *BlackBoxProberManager) GetProber(ctx context.Context, name string) (p Prober, found bool, err error) {
@@ -143,6 +188,86 @@ func (m *BlackBoxProberManager) CreateProber(ctx context.Context, name string) (
 
 func (m *BlackBoxProberManager) DeleteProber(ctx context.Context, name string) error {
 	return nil
+}
+
+func (m *BlackBoxProberManager) GetPrometheus(ctx context.Context) (found bool, err error) {
+	_, err = m.prometheusClient().Get(ctx, PrometheusResourceName, metav1.GetOptions{})
+	if err != nil {
+		if kerr.IsNotFound(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("failed to GET prometheus %q: %w", fmt.Sprintf("%s/%s", m.namespace, PrometheusResourceName), err)
+	}
+	return true, nil
+}
+
+func (m *BlackBoxProberManager) CreatePrometheus(ctx context.Context) error {
+	prometheus := m.buildPrometheusResource()
+	unstructuredPrometheus, err := convertToUnstructured(&prometheus)
+	if err != nil {
+		return fmt.Errorf("failed to convert prometheus to unstructured object: %w", err)
+	}
+
+	_, err = m.prometheusClient().Create(ctx, unstructuredPrometheus, metav1.CreateOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to CREATE prometheus %q: %w", fmt.Sprintf("%s/%s", prometheus["metadata"].(map[string]interface{})["namespace"], prometheus["metadata"].(map[string]interface{})["name"]), err)
+	}
+
+	return nil
+}
+
+func (m *BlackBoxProberManager) DeletePrometheus(ctx context.Context) error {
+	err := m.prometheusClient().Delete(ctx, PrometheusResourceName, metav1.DeleteOptions{})
+	if err != nil && !kerr.IsNotFound(err) {
+		return fmt.Errorf("failed to DELETE prometheus %q: %w", fmt.Sprintf("%s/%s", m.namespace, PrometheusResourceName), err)
+	}
+	return nil
+}
+
+// buildPrometheusResource creates a Prometheus resource for synthetic monitoring
+// based on the configuration from obs-prometheus-rhobs.yaml
+func (m *BlackBoxProberManager) buildPrometheusResource() map[string]interface{} {
+	labels := map[string]interface{}{
+		"app.kubernetes.io/managed-by": "observability-operator",
+	}
+
+	prometheus := map[string]interface{}{
+		"apiVersion": PrometheusAPIVersion,
+		"kind":       PrometheusKind,
+		"metadata": map[string]interface{}{
+			"name":      PrometheusResourceName,
+			"namespace": m.namespace,
+			"labels":    labels,
+		},
+		"spec": map[string]interface{}{
+			"probeNamespaceSelector": map[string]interface{}{},
+			"probeSelector": map[string]interface{}{
+				"matchLabels": map[string]interface{}{
+					"rhobs.monitoring/managed-by": SyntheticsAgentManagedByValue,
+				},
+			},
+			"remoteWrite": []interface{}{
+				map[string]interface{}{
+					"url": m.remoteWriteURL,
+					"headers": map[string]interface{}{
+						"THANOS-TENANT": m.remoteWriteTenant,
+					},
+				},
+			},
+			"resources": map[string]interface{}{
+				"requests": map[string]interface{}{
+					"cpu":    m.prometheusResources.CPURequests,
+					"memory": m.prometheusResources.MemoryRequests,
+				},
+				"limits": map[string]interface{}{
+					"cpu":    m.prometheusResources.CPULimits,
+					"memory": m.prometheusResources.MemoryLimits,
+				},
+			},
+		},
+	}
+
+	return prometheus
 }
 
 func (m *BlackBoxProberManager) buildProberDeployment(proberName string) appsv1.Deployment {

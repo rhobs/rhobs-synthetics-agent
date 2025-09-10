@@ -67,6 +67,14 @@ func main() {
 	// API Config flags
 	startCmd.Flags().StringSlice("api-urls", []string{}, "Comma-separated list of complete API URLs (e.g., https://api.example.com/api/metrics/v1/tenant/probes)")
 
+	// Prometheus Config flags
+	startCmd.Flags().String("prometheus-remote-write-url", "http://thanos-receive-router-rhobs.rhobs-int.svc.cluster.local:19291/api/v1/receive", "Thanos remote write endpoint URL for Prometheus configuration")
+	startCmd.Flags().String("prometheus-remote-write-tenant", "hcp", "Thanos tenant identifier for remote write requests")
+	startCmd.Flags().String("prometheus-cpu-requests", "100m", "CPU requests for Prometheus pod")
+	startCmd.Flags().String("prometheus-cpu-limits", "500m", "CPU limits for Prometheus pod")
+	startCmd.Flags().String("prometheus-memory-requests", "256Mi", "Memory requests for Prometheus pod")
+	startCmd.Flags().String("prometheus-memory-limits", "512Mi", "Memory limits for Prometheus pod")
+
 	// Bind flags to viper
 	_ = viper.BindPFlag("config", startCmd.Flags().Lookup("config"))
 	_ = viper.BindPFlag("log_level", startCmd.Flags().Lookup("log-level"))
@@ -75,6 +83,12 @@ func main() {
 	_ = viper.BindPFlag("kube_config", startCmd.Flags().Lookup("kubeconfig"))
 	_ = viper.BindPFlag("namespace", startCmd.Flags().Lookup("namespace"))
 	_ = viper.BindPFlag("api_urls", startCmd.Flags().Lookup("api-urls"))
+	_ = viper.BindPFlag("prometheus.remote_write_url", startCmd.Flags().Lookup("prometheus-remote-write-url"))
+	_ = viper.BindPFlag("prometheus.remote_write_tenant", startCmd.Flags().Lookup("prometheus-remote-write-tenant"))
+	_ = viper.BindPFlag("prometheus.cpu_requests", startCmd.Flags().Lookup("prometheus-cpu-requests"))
+	_ = viper.BindPFlag("prometheus.cpu_limits", startCmd.Flags().Lookup("prometheus-cpu-limits"))
+	_ = viper.BindPFlag("prometheus.memory_requests", startCmd.Flags().Lookup("prometheus-memory-requests"))
+	_ = viper.BindPFlag("prometheus.memory_limits", startCmd.Flags().Lookup("prometheus-memory-limits"))
 
 	// Add commands to the root command
 	rootCmd.AddCommand(startCmd)

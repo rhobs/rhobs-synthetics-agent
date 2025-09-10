@@ -14,18 +14,30 @@ type Config struct {
 	LogFormat       string        `mapstructure:"log_format"`
 	PollingInterval time.Duration `mapstructure:"polling_interval"`
 	GracefulTimeout time.Duration `mapstructure:"graceful_timeout"`
-	
+
 	// API Configuration
-	APIURLs         []string `mapstructure:"api_urls"`          // List of complete API URLs to poll
-	LabelSelector   string   `mapstructure:"label_selector"`
-	JWTToken        string   `mapstructure:"jwt_token"`
-	
+	APIURLs       []string `mapstructure:"api_urls"` // List of complete API URLs to poll
+	LabelSelector string   `mapstructure:"label_selector"`
+	JWTToken      string   `mapstructure:"jwt_token"`
+
 	// Kubernetes Configuration
-	KubeConfig      string `mapstructure:"kube_config"`
-	Namespace       string `mapstructure:"namespace"`
-	
+	KubeConfig string `mapstructure:"kube_config"`
+	Namespace  string `mapstructure:"namespace"`
+
+	// Prometheus Configuration
+	Prometheus PrometheusConfig `mapstructure:"prometheus"`
+
 	// Blackbox Configuration
 	Blackbox k8s.BlackboxConfig `mapstructure:"blackbox"`
+}
+
+type PrometheusConfig struct {
+	RemoteWriteURL    string `mapstructure:"remote_write_url"`
+	RemoteWriteTenant string `mapstructure:"remote_write_tenant"`
+	CPURequests       string `mapstructure:"cpu_requests"`
+	CPULimits         string `mapstructure:"cpu_limits"`
+	MemoryRequests    string `mapstructure:"memory_requests"`
+	MemoryLimits      string `mapstructure:"memory_limits"`
 }
 
 // GetAPIURLs returns the list of complete API URLs
