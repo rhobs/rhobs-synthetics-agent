@@ -189,7 +189,7 @@ func (w *Worker) fetchProbeList(ctx context.Context, selector string) ([]api.Pro
 	}
 
 	labelSelector := selector
-	if w.config != nil {
+	if selector == "" && w.config != nil {
 		labelSelector = w.config.LabelSelector
 	}
 
@@ -271,7 +271,11 @@ func (w *Worker) updateProbeStatus(probeID, status string) {
 // createProbe creates a Custom Resource for a single probe
 func (w *Worker) createProbes(ctx context.Context, shutdownChan chan struct{}) error {
 	// Fetch probe configurations from the API
-	probes, err := w.fetchProbeList(ctx, "pending")
+	labelSelector, err := w.setStatusSelector(ctx, "pending")
+	if err != nil {
+		return fmt.Errorf("failed to set selector: %w", err)
+	}
+	probes, err := w.fetchProbeList(ctx, labelSelector)
 	if err != nil {
 		return fmt.Errorf("failed to fetch probe list: %w", err)
 	}
@@ -368,9 +372,8 @@ func (w *Worker) manageProber(ctx context.Context, name string) error {
 func (w *Worker) deleteProbe(ctx context.Context, shutdownChan chan struct{}) error {
 	labelSelector, err := w.setStatusSelector(ctx, "terminating")
 	if err != nil {
-		return fmt.Errorf("failed to fetch probe list: %w", err)
+		return fmt.Errorf("failed to set selector: %w", err)
 	}
-	logger.Infof("Fetching probe list from %d API endpoints with label selector: %s", len(w.apiClients), labelSelector)
 	probes, err := w.fetchProbeList(ctx, labelSelector)
 	if err != nil {
 		return fmt.Errorf("failed to fetch probe list: %w", err)
