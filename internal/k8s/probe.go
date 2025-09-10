@@ -185,6 +185,49 @@ func (pm *ProbeManager) CreateProbeK8sResource(probe api.Probe, config BlackboxP
 	return nil
 }
 
+// DeleteProbeK8sResource deletes a Probe Custom Resource from Kubernetes
+func (pm *ProbeManager) DeleteProbeK8sResource(probe api.Probe) error {
+	// Check if we can interact with Kubernetes resources
+	if !pm.isK8sCluster() {
+		return fmt.Errorf("not running in a Kubernetes cluster")
+	}
+
+	if pm.probeAPIGroup == "" {
+		return fmt.Errorf("no compatible Probe CRDs found in cluster")
+	}
+
+	if pm.kubeClient == nil {
+		return fmt.Errorf("kubernetes client not available")
+	}
+
+	// Define the GVR for Probe resources
+	probeGVR := schema.GroupVersionResource{
+		Group:    pm.probeAPIGroup,
+		Version:  "v1",
+		Resource: "probes",
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Construct the probe name using the same pattern as in CreateProbeK8sResource
+	probeName := fmt.Sprintf("probe-%s", probe.ID)
+
+	// Delete the resource from Kubernetes
+	err := pm.kubeClient.DynamicClient().Resource(probeGVR).Namespace(pm.namespace).Delete(
+		ctx,
+		probeName,
+		metav1.DeleteOptions{},
+	)
+
+	if err != nil {
+		return fmt.Errorf("failed to delete Probe resource %s from Kubernetes: %w", probeName, err)
+	}
+
+	logger.Infof("Successfully deleted Probe resource %s from Kubernetes", probeName)
+	return nil
+}
+
 // CreateProbeResource creates a Probe Custom Resource (compatible with both monitoring.coreos.com/v1 and monitoring.rhobs/v1)
 func (pm *ProbeManager) CreateProbeResource(probe api.Probe, config BlackboxProbingConfig) (*monitoringv1.Probe, error) {
 	if err := pm.ValidateURL(probe.StaticURL); err != nil {

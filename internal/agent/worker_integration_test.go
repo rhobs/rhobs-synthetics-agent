@@ -50,9 +50,9 @@ func TestWorker_processProbe_Success(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	err = worker.processProbe(ctx, probe)
+	err = worker.createProbe(ctx, probe)
 	if err != nil {
-		t.Errorf("processProbe() failed: %v", err)
+		t.Errorf("createProbe() failed: %v", err)
 	}
 }
 
@@ -87,9 +87,9 @@ func TestWorker_processProbe_ValidationFailure(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	err = worker.processProbe(ctx, probe)
+	err = worker.createProbe(ctx, probe)
 	if err == nil {
-		t.Error("processProbe() should fail for invalid URL")
+		t.Error("createProbe() should fail for invalid URL")
 	}
 }
 

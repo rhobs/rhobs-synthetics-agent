@@ -220,7 +220,7 @@ func TestWorker_fetchProbeList(t *testing.T) {
 	ctx := context.Background()
 
 	// Test that fetchProbeList returns empty slice without API client
-	probes, err := worker.fetchProbeList(ctx)
+	probes, err := worker.fetchProbeList(ctx, "")
 	if err != nil {
 		t.Errorf("fetchProbeList should not fail when no API client is configured, got error: %v", err)
 	}
@@ -245,7 +245,7 @@ func TestWorker_fetchProbeList_WithAPI(t *testing.T) {
 
 	// This will fail because the API endpoint doesn't exist
 	// but it tests that the method signature is correct
-	_, err = worker.fetchProbeList(ctx)
+	_, err = worker.fetchProbeList(ctx, "test=true")
 	if err == nil {
 		t.Error("Expected fetchProbeList to fail when API endpoint doesn't exist")
 	}
@@ -369,13 +369,13 @@ func TestWorker_processProbe_K8sIntegration(t *testing.T) {
 
 	// This should not fail even when not in K8s cluster
 	// because it falls back to logging
-	err = worker.processProbe(ctx, probe)
+	err = worker.createProbe(ctx, probe)
 	if err != nil {
-		t.Errorf("processProbe() should not fail when falling back to logging: %v", err)
+		t.Errorf("createProbe() should not fail when falling back to logging: %v", err)
 	}
 }
 
-func TestWorker_processProbe_FallbackLogging(t *testing.T) {
+func TestWorker_createProbe_FallbackLogging(t *testing.T) {
 	cfg := &Config{
 		PollingInterval: 30 * time.Second,
 		GracefulTimeout: 30 * time.Second,
@@ -406,9 +406,9 @@ func TestWorker_processProbe_FallbackLogging(t *testing.T) {
 	}
 
 	// This should fail because URL validation fails
-	err = worker.processProbe(ctx, probe)
+	err = worker.createProbe(ctx, probe)
 	if err == nil {
-		t.Error("processProbe() should fail when URL validation fails")
+		t.Error("createProbe() should fail when URL validation fails")
 	}
 }
 
@@ -549,7 +549,7 @@ func TestWorker_fetchProbeList_NoAPIClients(t *testing.T) {
 	}
 	ctx := context.Background()
 
-	probes, err := worker.fetchProbeList(ctx)
+	probes, err := worker.fetchProbeList(ctx, "")
 	if err != nil {
 		t.Errorf("fetchProbeList() should not fail when no API clients are configured, got error: %v", err)
 	}

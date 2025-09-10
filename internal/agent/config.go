@@ -14,16 +14,16 @@ type Config struct {
 	LogFormat       string        `mapstructure:"log_format"`
 	PollingInterval time.Duration `mapstructure:"polling_interval"`
 	GracefulTimeout time.Duration `mapstructure:"graceful_timeout"`
-	
+
 	// API Configuration
-	APIURLs         []string `mapstructure:"api_urls"`          // List of complete API URLs to poll
-	LabelSelector   string   `mapstructure:"label_selector"`
-	JWTToken        string   `mapstructure:"jwt_token"`
-	
+	APIURLs       []string `mapstructure:"api_urls"` // List of complete API URLs to poll
+	LabelSelector string   `mapstructure:"label_selector"`
+	JWTToken      string   `mapstructure:"jwt_token"`
+
 	// Kubernetes Configuration
-	KubeConfig      string `mapstructure:"kube_config"`
-	Namespace       string `mapstructure:"namespace"`
-	
+	KubeConfig string `mapstructure:"kube_config"`
+	Namespace  string `mapstructure:"namespace"`
+
 	// Blackbox Configuration
 	Blackbox k8s.BlackboxConfig `mapstructure:"blackbox"`
 }
@@ -46,7 +46,7 @@ func LoadConfig() (*Config, error) {
 	viper.SetDefault("polling_interval", "30s")
 	viper.SetDefault("graceful_timeout", "30s")
 	viper.SetDefault("api_urls", []string{})
-	viper.SetDefault("label_selector", "private=false,rhobs-synthetics/status=pending")
+	viper.SetDefault("label_selector", "private=false")
 	viper.SetDefault("jwt_token", "")
 	viper.SetDefault("kube_config", "")
 	viper.SetDefault("namespace", "default")
