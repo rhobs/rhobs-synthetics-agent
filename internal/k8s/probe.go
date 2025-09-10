@@ -193,6 +193,7 @@ func (pm *ProbeManager) CreateProbeResource(probe api.Probe, config BlackboxProb
 
 	// Create metadata labels starting with required labels
 	metadataLabels := map[string]string{
+		"rhobs.monitoring/probe-id":   probe.ID,
 		"rhobs.monitoring/managed-by": "rhobs-synthetics-agent",
 	}
 
