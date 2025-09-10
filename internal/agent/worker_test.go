@@ -220,7 +220,7 @@ func TestWorker_fetchProbeList(t *testing.T) {
 	ctx := context.Background()
 
 	// Test that fetchProbeList returns empty slice without API client
-	probes, err := worker.fetchProbeList(ctx)
+	probes, err := worker.fetchProbeList(ctx, "")
 	if err != nil {
 		t.Errorf("fetchProbeList should not fail when no API client is configured, got error: %v", err)
 	}
@@ -245,7 +245,7 @@ func TestWorker_fetchProbeList_WithAPI(t *testing.T) {
 
 	// This will fail because the API endpoint doesn't exist
 	// but it tests that the method signature is correct
-	_, err = worker.fetchProbeList(ctx)
+	_, err = worker.fetchProbeList(ctx, "test=true")
 	if err == nil {
 		t.Error("Expected fetchProbeList to fail when API endpoint doesn't exist")
 	}
@@ -549,7 +549,7 @@ func TestWorker_fetchProbeList_NoAPIClients(t *testing.T) {
 	}
 	ctx := context.Background()
 
-	probes, err := worker.fetchProbeList(ctx)
+	probes, err := worker.fetchProbeList(ctx, "")
 	if err != nil {
 		t.Errorf("fetchProbeList() should not fail when no API clients are configured, got error: %v", err)
 	}

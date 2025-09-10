@@ -296,32 +296,13 @@ func (w *Worker) createProbes(ctx context.Context, shutdownChan chan struct{}) e
 		default:
 		}
 
-		// Try to create the probe Custom Resource in Kubernetes
-		err = w.probeManager.CreateProbeK8sResource(probe, w.config.Blackbox.Probing)
-		logger.Infof("Processing probe %s with target URL: %s", probe.ID, probe.StaticURL)
-		if err != nil {
-			// If K8s creation fails, fall back to logging the resource definition
-			logger.Infof("Failed to create Kubernetes resource (falling back to logging): %v", err)
-
-			cr, crErr := w.probeManager.CreateProbeResource(probe, w.config.Blackbox.Probing)
-			if crErr != nil {
-				w.updateProbeStatus(probe.ID, "failed")
-				return fmt.Errorf("failed to create probe resource definition: %w", crErr)
-			}
-
-			crJSON, jsonErr := json.MarshalIndent(cr, "", "  ")
-			if jsonErr != nil {
-				logger.Infof("Failed to marshal CR to JSON: %v", jsonErr)
-			} else {
-				logger.Infof("Would create probe Custom Resource:\n%s", string(crJSON))
-			}
-
-			logger.Infof("Probe %s processed (logged only - not running in compatible K8s cluster)", probe.ID)
-			w.updateProbeStatus(probe.ID, "active")
-			metrics.RecordProbeResourceOperation("create", true)
+		if err := w.createProbe(ctx, probe); err != nil {
+			logger.Infof("Failed to process probe %s: %v", probe.ID, err)
+			// Record failed probe resource operation
+			metrics.RecordProbeResourceOperation("create", false)
 		} else {
-			logger.Infof("Successfully created monitoring.coreos.com/v1 Probe resource for probe %s", probe.ID)
-			w.updateProbeStatus(probe.ID, "active")
+			logger.Infof("Successfully processed probe %s", probe.ID)
+			// Record successful probe resource operation
 			metrics.RecordProbeResourceOperation("create", true)
 		}
 	}
@@ -366,6 +347,39 @@ func (w *Worker) manageProber(ctx context.Context, name string) error {
 		logger.Infof("new prober %q for %q created successfully", prober, name)
 	}
 	logger.Debugf("prober: %#v", prober)
+	return nil
+}
+
+// createProbe processes a single probe (extracted for testing)
+func (w *Worker) createProbe(ctx context.Context, probe api.Probe) error {
+	// Try to create the probe Custom Resource in Kubernetes
+	err := w.probeManager.CreateProbeK8sResource(probe, w.config.Blackbox.Probing)
+	logger.Infof("Processing probe %s with target URL: %s", probe.ID, probe.StaticURL)
+	if err != nil {
+		// If K8s creation fails, fall back to logging the resource definition
+		logger.Infof("Failed to create Kubernetes resource (falling back to logging): %v", err)
+
+		cr, crErr := w.probeManager.CreateProbeResource(probe, w.config.Blackbox.Probing)
+		if crErr != nil {
+			w.updateProbeStatus(probe.ID, "failed")
+			return fmt.Errorf("failed to create probe resource definition: %w", crErr)
+		}
+
+		crJSON, jsonErr := json.MarshalIndent(cr, "", "  ")
+		if jsonErr != nil {
+			logger.Infof("Failed to marshal CR to JSON: %v", jsonErr)
+		} else {
+			logger.Infof("Would create probe Custom Resource:\n%s", string(crJSON))
+		}
+
+		logger.Infof("Probe %s processed (logged only - not running in compatible K8s cluster)", probe.ID)
+		w.updateProbeStatus(probe.ID, "active")
+		metrics.RecordProbeResourceOperation("create", true)
+	} else {
+		logger.Infof("Successfully created monitoring.coreos.com/v1 Probe resource for probe %s", probe.ID)
+		w.updateProbeStatus(probe.ID, "active")
+		metrics.RecordProbeResourceOperation("create", true)
+	}
 	return nil
 }
 
