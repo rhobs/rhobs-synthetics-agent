@@ -6,7 +6,7 @@ A synthetic monitoring agent for the Red Hat Observability Service (RHOBS) ecosy
 
 The RHOBS Synthetics Agent provides:
 - **Multi-API Integration**: Polls multiple RHOBS Probes APIs simultaneously to retrieve probe configurations
-- **URL Validation**: Validates target URLs before creating monitoring resources  
+- **URL Validation**: Validates target URLs before creating monitoring resources
 - **Custom Resource Management**: Creates Probe CRs in Kubernetes (auto-detects `monitoring.rhobs/v1` or `monitoring.coreos.com/v1`)
 - **Status Tracking**: Updates probe status (active/failed) via API calls across all configured APIs
 - **Label-based Filtering**: Uses configurable label selectors to target specific probes
@@ -20,7 +20,7 @@ The RHOBS Synthetics Agent provides:
 # Build the binary
 make build
 
-# Build and run immediately  
+# Build and run immediately
 make run
 
 # Build with specific configuration
@@ -93,13 +93,13 @@ graceful_timeout: 60s
 # API Configuration
 api_base_urls:
   - "https://observatorium-api-1.example.com"
-  - "https://observatorium-api-2.example.com" 
+  - "https://observatorium-api-2.example.com"
   - "https://observatorium-api-3.example.com"
 
 api_tenant: "my-rhobs-tenant"
 label_selector: "private=false,"
 
-# Kubernetes Configuration  
+# Kubernetes Configuration
 namespace: "monitoring"
 ```
 
@@ -165,8 +165,8 @@ metadata:
     rhobs.monitoring/managed-by: "rhobs-synthetics-agent"
 spec:
   interval: "30s"
-  module: "http_2xx" 
-  prober_url: "http://blackbox-exporter:9115"
+  module: "http_2xx"
+  prober_url: "synthetics-blackbox-prober-default-service:9115"
   targets:
     staticConfig:
       static:

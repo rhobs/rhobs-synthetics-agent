@@ -347,7 +347,7 @@ func TestWorker_processProbe_K8sIntegration(t *testing.T) {
 			Probing: k8s.BlackboxProbingConfig{
 				Interval:  "30s",
 				Module:    "http_2xx",
-				ProberURL: "http://blackbox-exporter:9115",
+				ProberURL: "synthetics-blackbox-prober-default-service:9115",
 			},
 		},
 	}
@@ -384,7 +384,7 @@ func TestWorker_createProbe_FallbackLogging(t *testing.T) {
 			Probing: k8s.BlackboxProbingConfig{
 				Interval:  "30s",
 				Module:    "http_2xx",
-				ProberURL: "http://blackbox-exporter:9115",
+				ProberURL: "synthetics-blackbox-prober-default-service:9115",
 			},
 		},
 	}
@@ -398,7 +398,7 @@ func TestWorker_createProbe_FallbackLogging(t *testing.T) {
 	// Test with an invalid URL to trigger URL validation failure
 	probe := api.Probe{
 		ID:        "test-probe-invalid",
-		StaticURL: "https://non-existent-domain-12345.com",
+		StaticURL: "invalid-url-format",
 		Labels: map[string]string{
 			"cluster_id": "test-cluster",
 		},

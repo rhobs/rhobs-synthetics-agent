@@ -7,10 +7,10 @@ import (
 	"testing"
 	"time"
 
+	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/rhobs/rhobs-synthetics-agent/internal/agent"
 	"github.com/rhobs/rhobs-synthetics-agent/internal/api"
 	"github.com/rhobs/rhobs-synthetics-agent/internal/k8s"
-	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -24,7 +24,7 @@ import (
 func TestAgent_E2E_KubernetesProbeCreation(t *testing.T) {
 	// This test verifies that the agent can create Kubernetes Probe CRDs
 	// when configured to do so
-	
+
 	// Start mock API server
 	mockAPI := NewMockAPIServer()
 	defer mockAPI.Close()
@@ -41,7 +41,7 @@ func TestAgent_E2E_KubernetesProbeCreation(t *testing.T) {
 		},
 		Status: "pending",
 	}
-	
+
 	// Add the test probe to mock API
 	mockAPI.AddProbe(testProbe)
 
@@ -64,7 +64,7 @@ func TestAgent_E2E_KubernetesProbeCreation(t *testing.T) {
 	// Run agent in background
 	var wg sync.WaitGroup
 	wg.Add(1)
-	
+
 	go func() {
 		defer wg.Done()
 		_ = testAgent.Run()
@@ -76,7 +76,7 @@ func TestAgent_E2E_KubernetesProbeCreation(t *testing.T) {
 	// Test K8s Probe Manager functionality
 	t.Run("TestProbeManagerCreation", func(t *testing.T) {
 		pm := k8s.NewProbeManager("monitoring", "")
-		
+
 		if pm == nil {
 			t.Fatal("ProbeManager should not be nil")
 		}
@@ -84,11 +84,11 @@ func TestAgent_E2E_KubernetesProbeCreation(t *testing.T) {
 
 	t.Run("TestProbeResourceCreation", func(t *testing.T) {
 		pm := k8s.NewProbeManager("monitoring", "")
-		
+
 		config := k8s.BlackboxProbingConfig{
 			Interval:  "30s",
 			Module:    "http_2xx",
-			ProberURL: "http://blackbox-exporter:9115",
+			ProberURL: "synthetics-blackbox-prober-default-service:9115",
 		}
 
 		// Create probe resource using the new CRD types
@@ -98,8 +98,17 @@ func TestAgent_E2E_KubernetesProbeCreation(t *testing.T) {
 		}
 
 		// Verify the resource structure matches prometheus-operator CRD
-		if probeResource.APIVersion != "monitoring.coreos.com/v1" {
-			t.Errorf("Expected APIVersion 'monitoring.coreos.com/v1', got %s", probeResource.APIVersion)
+		// Should be either monitoring.rhobs/v1 (preferred) or monitoring.coreos.com/v1 (fallback)
+		expectedVersions := []string{"monitoring.rhobs/v1", "monitoring.coreos.com/v1"}
+		validAPIVersion := false
+		for _, expectedVersion := range expectedVersions {
+			if probeResource.APIVersion == expectedVersion {
+				validAPIVersion = true
+				break
+			}
+		}
+		if !validAPIVersion {
+			t.Errorf("Expected APIVersion to be one of %v, got %s", expectedVersions, probeResource.APIVersion)
 		}
 
 		if probeResource.Kind != "Probe" {
@@ -123,8 +132,8 @@ func TestAgent_E2E_KubernetesProbeCreation(t *testing.T) {
 			t.Errorf("Expected interval '30s', got %s", probeResource.Spec.Interval)
 		}
 
-		if probeResource.Spec.ProberSpec.URL != "http://blackbox-exporter:9115" {
-			t.Errorf("Expected prober URL 'http://blackbox-exporter:9115', got %s", probeResource.Spec.ProberSpec.URL)
+		if probeResource.Spec.ProberSpec.URL != "synthetics-blackbox-prober-default-service:9115" {
+			t.Errorf("Expected prober URL 'synthetics-blackbox-prober-default-service:9115', got %s", probeResource.Spec.ProberSpec.URL)
 		}
 
 		// Verify targets
@@ -159,7 +168,7 @@ func TestAgent_E2E_KubernetesProbeCreation(t *testing.T) {
 
 	t.Run("TestProbeResourceValidation", func(t *testing.T) {
 		pm := k8s.NewProbeManager("monitoring", "")
-		
+
 		// Test with invalid URL
 		invalidProbe := api.Probe{
 			ID:        "invalid-probe",
@@ -171,7 +180,7 @@ func TestAgent_E2E_KubernetesProbeCreation(t *testing.T) {
 		config := k8s.BlackboxProbingConfig{
 			Interval:  "30s",
 			Module:    "http_2xx",
-			ProberURL: "http://blackbox-exporter:9115",
+			ProberURL: "synthetics-blackbox-prober-default-service:9115",
 		}
 
 		_, err := pm.CreateProbeResource(invalidProbe, config)
@@ -182,7 +191,7 @@ func TestAgent_E2E_KubernetesProbeCreation(t *testing.T) {
 
 	// Gracefully shutdown the agent
 	testAgent.Shutdown()
-	
+
 	// Wait for agent to shutdown
 	done := make(chan struct{})
 	go func() {
@@ -201,7 +210,7 @@ func TestAgent_E2E_KubernetesProbeCreation(t *testing.T) {
 func TestAgent_E2E_KubernetesProbeWithFakeClient(t *testing.T) {
 	// This test uses fake Kubernetes clients to test the full K8s integration
 	// without requiring an actual Kubernetes cluster
-	
+
 	// Start mock API server
 	mockAPI := NewMockAPIServer()
 	defer mockAPI.Close()
@@ -217,13 +226,13 @@ func TestAgent_E2E_KubernetesProbeWithFakeClient(t *testing.T) {
 		},
 		Status: "pending",
 	}
-	
+
 	mockAPI.AddProbe(testProbe)
 
 	t.Run("TestWithFakeKubernetesClient", func(t *testing.T) {
 		// Create a runtime scheme for the fake client
 		scheme := runtime.NewScheme()
-		
+
 		// Create fake Kubernetes clients
 		fakeKubeClient := kubefake.NewSimpleClientset()
 		fakeDynamicClient := fake.NewSimpleDynamicClient(scheme)
@@ -234,7 +243,7 @@ func TestAgent_E2E_KubernetesProbeWithFakeClient(t *testing.T) {
 		config := k8s.BlackboxProbingConfig{
 			Interval:  "30s",
 			Module:    "http_2xx",
-			ProberURL: "http://blackbox-exporter:9115",
+			ProberURL: "synthetics-blackbox-prober-default-service:9115",
 		}
 
 		// Create probe resource
@@ -275,8 +284,17 @@ func TestAgent_E2E_KubernetesProbeWithFakeClient(t *testing.T) {
 			t.Errorf("Expected Kind 'Probe', got %s", createdProbe.GetKind())
 		}
 
-		if createdProbe.GetAPIVersion() != "monitoring.coreos.com/v1" {
-			t.Errorf("Expected APIVersion 'monitoring.coreos.com/v1', got %s", createdProbe.GetAPIVersion())
+		// Should be either monitoring.rhobs/v1 (preferred) or monitoring.coreos.com/v1 (fallback)
+		expectedVersions := []string{"monitoring.rhobs/v1", "monitoring.coreos.com/v1"}
+		validAPIVersion := false
+		for _, expectedVersion := range expectedVersions {
+			if createdProbe.GetAPIVersion() == expectedVersion {
+				validAPIVersion = true
+				break
+			}
+		}
+		if !validAPIVersion {
+			t.Errorf("Expected APIVersion to be one of %v, got %s", expectedVersions, createdProbe.GetAPIVersion())
 		}
 
 		if createdProbe.GetName() != "probe-fake-k8s-probe" {
@@ -303,8 +321,8 @@ func TestAgent_E2E_KubernetesProbeWithFakeClient(t *testing.T) {
 			t.Fatalf("Failed to get prober from spec: %v", err)
 		}
 
-		if prober["url"] != "http://blackbox-exporter:9115" {
-			t.Errorf("Expected prober URL 'http://blackbox-exporter:9115', got %s", prober["url"])
+		if prober["url"] != "synthetics-blackbox-prober-default-service:9115" {
+			t.Errorf("Expected prober URL 'synthetics-blackbox-prober-default-service:9115', got %s", prober["url"])
 		}
 
 		// Verify targets
@@ -356,7 +374,7 @@ func convertProbeToUnstructured(probe *monitoringv1.Probe) (*unstructured.Unstru
 
 func TestAgent_E2E_KubernetesProbeEdgeCases(t *testing.T) {
 	// Test various edge cases for K8s Probe creation
-	
+
 	testCases := []struct {
 		name        string
 		probe       api.Probe
@@ -375,7 +393,7 @@ func TestAgent_E2E_KubernetesProbeEdgeCases(t *testing.T) {
 			config: k8s.BlackboxProbingConfig{
 				Interval:  "60s",
 				Module:    "http_2xx",
-				ProberURL: "http://blackbox-exporter:9115",
+				ProberURL: "synthetics-blackbox-prober-default-service:9115",
 			},
 			expectError: false,
 		},
@@ -397,7 +415,7 @@ func TestAgent_E2E_KubernetesProbeEdgeCases(t *testing.T) {
 			config: k8s.BlackboxProbingConfig{
 				Interval:  "15s",
 				Module:    "http_2xx",
-				ProberURL: "http://blackbox-exporter:9115",
+				ProberURL: "synthetics-blackbox-prober-default-service:9115",
 			},
 			expectError: false,
 		},
@@ -412,7 +430,7 @@ func TestAgent_E2E_KubernetesProbeEdgeCases(t *testing.T) {
 			config: k8s.BlackboxProbingConfig{
 				Interval:  "30s",
 				Module:    "http_2xx",
-				ProberURL: "http://blackbox-exporter:9115",
+				ProberURL: "synthetics-blackbox-prober-default-service:9115",
 			},
 			expectError: true,
 			errorMsg:    "URL validation failed",
@@ -428,7 +446,7 @@ func TestAgent_E2E_KubernetesProbeEdgeCases(t *testing.T) {
 			config: k8s.BlackboxProbingConfig{
 				Interval:  "30s",
 				Module:    "http_2xx",
-				ProberURL: "http://blackbox-exporter:9115",
+				ProberURL: "synthetics-blackbox-prober-default-service:9115",
 			},
 			expectError: true,
 			errorMsg:    "unsupported URL scheme",
@@ -438,9 +456,9 @@ func TestAgent_E2E_KubernetesProbeEdgeCases(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			pm := k8s.NewProbeManager("test-namespace", "")
-			
+
 			probeResource, err := pm.CreateProbeResource(tc.probe, tc.config)
-			
+
 			if tc.expectError {
 				if err == nil {
 					t.Errorf("Expected error for test case '%s', but got none", tc.name)
@@ -453,23 +471,32 @@ func TestAgent_E2E_KubernetesProbeEdgeCases(t *testing.T) {
 					t.Errorf("Unexpected error for test case '%s': %v", tc.name, err)
 				} else {
 					// Verify basic structure
-					if probeResource.APIVersion != "monitoring.coreos.com/v1" {
-						t.Errorf("Expected APIVersion 'monitoring.coreos.com/v1', got %s", probeResource.APIVersion)
+					// Should be either monitoring.rhobs/v1 (preferred) or monitoring.coreos.com/v1 (fallback)
+					expectedVersions := []string{"monitoring.rhobs/v1", "monitoring.coreos.com/v1"}
+					validAPIVersion := false
+					for _, expectedVersion := range expectedVersions {
+						if probeResource.APIVersion == expectedVersion {
+							validAPIVersion = true
+							break
+						}
 					}
-					
+					if !validAPIVersion {
+						t.Errorf("Expected APIVersion to be one of %v, got %s", expectedVersions, probeResource.APIVersion)
+					}
+
 					if probeResource.Kind != "Probe" {
 						t.Errorf("Expected Kind 'Probe', got %s", probeResource.Kind)
 					}
-					
+
 					expectedName := "probe-" + tc.probe.ID
 					if probeResource.Name != expectedName {
 						t.Errorf("Expected name '%s', got %s", expectedName, probeResource.Name)
 					}
-					
+
 					// Verify all probe labels are included in target labels
 					for key, value := range tc.probe.Labels {
 						if probeResource.Spec.Targets.StaticConfig.Labels[key] != value {
-							t.Errorf("Expected target label '%s=%s', got '%s=%s'", 
+							t.Errorf("Expected target label '%s=%s', got '%s=%s'",
 								key, value, key, probeResource.Spec.Targets.StaticConfig.Labels[key])
 						}
 					}

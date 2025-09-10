@@ -40,7 +40,10 @@ func NewProbeManager(namespace, kubeconfigPath string) *ProbeManager {
 	return pm
 }
 
-// ValidateURL checks if a URL is ready to be monitored
+// ValidateURL checks if a URL has valid format and scheme
+// Note: We only validate format and scheme, not connectivity, as URLs may be
+// temporarily unreachable during deployment or due to transient network issues.
+// The blackbox exporter will handle the actual connectivity monitoring.
 func (pm *ProbeManager) ValidateURL(targetURL string) error {
 	parsedURL, err := url.Parse(targetURL)
 	if err != nil {
@@ -51,24 +54,8 @@ func (pm *ProbeManager) ValidateURL(targetURL string) error {
 		return fmt.Errorf("unsupported URL scheme: %s", parsedURL.Scheme)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	req, err := http.NewRequestWithContext(ctx, "HEAD", targetURL, nil)
-	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
-	}
-
-	resp, err := pm.httpClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("URL validation failed: %w", err)
-	}
-	defer func() {
-		_ = resp.Body.Close()
-	}()
-
-	if resp.StatusCode >= 500 {
-		return fmt.Errorf("URL validation failed with server error: %d", resp.StatusCode)
+	if parsedURL.Host == "" {
+		return fmt.Errorf("URL must have a host")
 	}
 
 	return nil
@@ -141,6 +128,11 @@ func (pm *ProbeManager) checkProbeCRDs() {
 	}
 
 	logger.Errorf("No compatible Probe CRDs found in cluster")
+}
+
+// SetProbeAPIGroup sets the API group for testing purposes
+func (pm *ProbeManager) SetProbeAPIGroup(apiGroup string) {
+	pm.probeAPIGroup = apiGroup
 }
 
 // CreateProbeK8sResource creates and applies a Probe Custom Resource to Kubernetes
@@ -266,9 +258,15 @@ func (pm *ProbeManager) CreateProbeResource(probe api.Probe, config BlackboxProb
 	}
 
 	// Create the Probe Custom Resource using the actual CRD types
+	// Use detected API group, fallback to monitoring.coreos.com for backwards compatibility
+	apiGroup := pm.probeAPIGroup
+	if apiGroup == "" {
+		apiGroup = "monitoring.coreos.com"
+	}
+	apiVersion := fmt.Sprintf("%s/v1", apiGroup)
 	probeResource := &monitoringv1.Probe{
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: "monitoring.coreos.com/v1",
+			APIVersion: apiVersion,
 			Kind:       "Probe",
 		},
 		ObjectMeta: metav1.ObjectMeta{

@@ -39,12 +39,12 @@ func TestProbeManager_ValidateURL_EdgeCases(t *testing.T) {
 		{
 			name:        "HTTP scheme - non-existent domain",
 			url:         "http://non-existent-domain-12345.com",
-			expectError: true, // Will fail because domain doesn't exist
+			expectError: false, // URL format is valid, connectivity is not checked
 		},
 		{
 			name:        "HTTPS scheme - non-existent domain",
 			url:         "https://non-existent-domain-12345.com",
-			expectError: true, // Will fail because domain doesn't exist
+			expectError: false, // URL format is valid, connectivity is not checked
 		},
 	}
 
@@ -63,18 +63,18 @@ func TestProbeManager_ValidateURL_EdgeCases(t *testing.T) {
 func TestProbeManager_ValidateURL_ServerErrors(t *testing.T) {
 	pm := NewProbeManager("test", "")
 
-	// Test server that returns 500
+	// Test server that returns 500 - should not error since we only validate format
 	server500 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
 	defer server500.Close()
 
 	err := pm.ValidateURL(server500.URL)
-	if err == nil {
-		t.Error("Expected error for 500 status code")
+	if err != nil {
+		t.Errorf("Did not expect error for server responses, only format validation: %v", err)
 	}
 
-	// Test server that returns 404 (should not error)
+	// Test server that returns 404 - should not error since we only validate format
 	server404 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 	}))
@@ -82,7 +82,7 @@ func TestProbeManager_ValidateURL_ServerErrors(t *testing.T) {
 
 	err = pm.ValidateURL(server404.URL)
 	if err != nil {
-		t.Errorf("Did not expect error for 404 status code: %v", err)
+		t.Errorf("Did not expect error for server responses, only format validation: %v", err)
 	}
 }
 
@@ -106,7 +106,7 @@ func TestProbeManager_CreateProbeResource_MissingLabels(t *testing.T) {
 	probeConfig := BlackboxProbingConfig{
 		Interval:  "30s",
 		Module:    "http_2xx",
-		ProberURL: "http://blackbox-exporter:9115",
+		ProberURL: "synthetics-blackbox-prober-default-service:9115",
 	}
 
 	cr, err := pm.CreateProbeResource(probe, probeConfig)
@@ -147,7 +147,7 @@ func TestProbeManager_CreateProbeResource_PartialLabels(t *testing.T) {
 	probeConfig := BlackboxProbingConfig{
 		Interval:  "30s",
 		Module:    "http_2xx",
-		ProberURL: "http://blackbox-exporter:9115",
+		ProberURL: "synthetics-blackbox-prober-default-service:9115",
 	}
 
 	cr, err := pm.CreateProbeResource(probe, probeConfig)
@@ -167,11 +167,11 @@ func TestProbeManager_CreateProbeResource_PartialLabels(t *testing.T) {
 
 func TestNewProbeManager(t *testing.T) {
 	pm := NewProbeManager("test-namespace", "")
-	
+
 	if pm.namespace != "test-namespace" {
 		t.Errorf("Expected namespace 'test-namespace', got %s", pm.namespace)
 	}
-	
+
 	if pm.httpClient == nil {
 		t.Error("httpClient should not be nil")
 	}

@@ -28,7 +28,7 @@ func TestWorker_processProbe_Success(t *testing.T) {
 			Probing: k8s.BlackboxProbingConfig{
 				Interval:  "30s",
 				Module:    "http_2xx",
-				ProberURL: "http://blackbox-exporter:9115",
+				ProberURL: "synthetics-blackbox-prober-default-service:9115",
 			},
 		},
 	}
@@ -65,7 +65,7 @@ func TestWorker_processProbe_ValidationFailure(t *testing.T) {
 			Probing: k8s.BlackboxProbingConfig{
 				Interval:  "30s",
 				Module:    "http_2xx",
-				ProberURL: "http://blackbox-exporter:9115",
+				ProberURL: "synthetics-blackbox-prober-default-service:9115",
 			},
 		},
 	}
@@ -78,7 +78,7 @@ func TestWorker_processProbe_ValidationFailure(t *testing.T) {
 	// Probe with invalid URL
 	probe := api.Probe{
 		ID:        "test-probe-invalid",
-		StaticURL: "https://non-existent-domain-12345.com",
+		StaticURL: "invalid-url-format",
 		Labels: map[string]string{
 			"cluster_id": "cluster-123",
 			"private":    "false",
@@ -140,7 +140,7 @@ func TestWorker_FullIntegration(t *testing.T) {
 			Probing: k8s.BlackboxProbingConfig{
 				Interval:  "30s",
 				Module:    "http_2xx",
-				ProberURL: "http://blackbox-exporter:9115",
+				ProberURL: "synthetics-blackbox-prober-default-service:9115",
 			},
 		},
 	}
@@ -206,7 +206,7 @@ func TestWorker_processProbes_WithValidConfig(t *testing.T) {
 			Probing: k8s.BlackboxProbingConfig{
 				Interval:  "30s",
 				Module:    "http_2xx",
-				ProberURL: "http://blackbox-exporter:9115",
+				ProberURL: "synthetics-blackbox-prober-default-service:9115",
 			},
 		},
 	}
