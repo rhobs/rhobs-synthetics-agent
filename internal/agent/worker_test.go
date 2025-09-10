@@ -347,7 +347,7 @@ func TestWorker_processProbe_K8sIntegration(t *testing.T) {
 			Probing: k8s.BlackboxProbingConfig{
 				Interval:  "30s",
 				Module:    "http_2xx",
-				ProberURL: "http://synthetics-blackbox-prober-default:9115",
+				ProberURL: "synthetics-blackbox-prober-default-service:9115",
 			},
 		},
 	}
@@ -384,7 +384,7 @@ func TestWorker_processProbe_FallbackLogging(t *testing.T) {
 			Probing: k8s.BlackboxProbingConfig{
 				Interval:  "30s",
 				Module:    "http_2xx",
-				ProberURL: "http://synthetics-blackbox-prober-default:9115",
+				ProberURL: "synthetics-blackbox-prober-default-service:9115",
 			},
 		},
 	}

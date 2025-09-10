@@ -106,7 +106,7 @@ func TestProbeManager_CreateProbeResource_MissingLabels(t *testing.T) {
 	probeConfig := BlackboxProbingConfig{
 		Interval:  "30s",
 		Module:    "http_2xx",
-		ProberURL: "http://synthetics-blackbox-prober-default:9115",
+		ProberURL: "synthetics-blackbox-prober-default-service:9115",
 	}
 
 	cr, err := pm.CreateProbeResource(probe, probeConfig)
@@ -147,7 +147,7 @@ func TestProbeManager_CreateProbeResource_PartialLabels(t *testing.T) {
 	probeConfig := BlackboxProbingConfig{
 		Interval:  "30s",
 		Module:    "http_2xx",
-		ProberURL: "http://synthetics-blackbox-prober-default:9115",
+		ProberURL: "synthetics-blackbox-prober-default-service:9115",
 	}
 
 	cr, err := pm.CreateProbeResource(probe, probeConfig)
