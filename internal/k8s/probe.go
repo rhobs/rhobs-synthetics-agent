@@ -246,7 +246,7 @@ func (pm *ProbeManager) CreateProbeResource(probe api.Probe, config BlackboxProb
 	// Create metadata labels starting with required labels
 	metadataLabels := map[string]string{
 		"rhobs.monitoring/probe-id":   probe.ID,
-		"rhobs.monitoring/managed-by": "rhobs-synthetics-agent",
+		"rhobs.monitoring/managed-by": SyntheticsAgentManagedByValue,
 	}
 
 	// Create target labels starting with basic probe information
@@ -302,6 +302,14 @@ func (pm *ProbeManager) CreateProbeResource(probe api.Probe, config BlackboxProb
 }
 
 func convertToUnstructured(object interface{}) (*unstructured.Unstructured, error) {
+	// If it's already a map[string]interface{}, use it directly
+	if objMap, ok := object.(map[string]interface{}); ok {
+		return &unstructured.Unstructured{
+			Object: objMap,
+		}, nil
+	}
+
+	// Otherwise, convert struct to map
 	obj, err := runtime.DefaultUnstructuredConverter.ToUnstructured(object)
 	if err != nil {
 		return &unstructured.Unstructured{}, err

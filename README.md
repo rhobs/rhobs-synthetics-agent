@@ -101,6 +101,16 @@ label_selector: "private=false,"
 
 # Kubernetes Configuration
 namespace: "monitoring"
+
+# Prometheus Configuration
+prometheus:
+  remote_write_url: "http://thanos-receive-router-rhobs.rhobs-int.svc.cluster.local:19291/api/v1/receive"
+  remote_write_tenant: "my-tenant"
+  cpu_requests: "200m"
+  cpu_limits: "1000m"
+  memory_requests: "512Mi"
+  memory_limits: "1Gi"
+  managed_by_operator: "observability-operator"
 ```
 
 ### Environment Variables
@@ -119,6 +129,15 @@ export LABEL_SELECTOR="private=false,"
 # Kubernetes settings
 export NAMESPACE="monitoring"
 
+# Prometheus configuration
+export PROMETHEUS_REMOTE_WRITE_URL="http://thanos-receive-router-rhobs.rhobs-int.svc.cluster.local:19291/api/v1/receive"
+export PROMETHEUS_REMOTE_WRITE_TENANT="my-tenant"
+export PROMETHEUS_CPU_REQUESTS="200m"
+export PROMETHEUS_CPU_LIMITS="1000m"
+export PROMETHEUS_MEMORY_REQUESTS="512Mi"
+export PROMETHEUS_MEMORY_LIMITS="1Gi"
+export PROMETHEUS_MANAGED_BY_OPERATOR="observability-operator"
+
 ./rhobs-synthetics-agent start
 ```
 
@@ -130,8 +149,31 @@ export NAMESPACE="monitoring"
   --log-level debug \
   --interval 30s \
   --graceful-timeout 60s \
-  --api-urls "https://api1.example.com/api/metrics/v1/my-tenant/probes,https://api2.example.com/api/metrics/v1/my-tenant/probes"
+  --api-urls "https://api1.example.com/api/metrics/v1/my-tenant/probes,https://api2.example.com/api/metrics/v1/my-tenant/probes" \
+  --prometheus-remote-write-url "http://thanos-receive-router-rhobs.rhobs-int.svc.cluster.local:19291/api/v1/receive" \
+  --prometheus-remote-write-tenant "my-tenant" \
+  --prometheus-cpu-requests "200m" \
+  --prometheus-cpu-limits "1000m" \
+  --prometheus-memory-requests "512Mi" \
+  --prometheus-memory-limits "1Gi" \
+  --prometheus-managed-by-operator "observability-operator"
 ```
+
+## Prometheus Configuration
+
+The agent can automatically create and manage a Prometheus instance for synthetic monitoring when running in a Kubernetes cluster. This Prometheus instance will scrape probe resources and send metrics to a remote write endpoint (typically Thanos).
+
+### Configuration Options
+
+| Flag | Environment Variable | Config File Key | Default | Description |
+|------|---------------------|----------------|---------|-------------|
+| `--prometheus-remote-write-url` | `PROMETHEUS_REMOTE_WRITE_URL` | `prometheus.remote_write_url` | `http://thanos-receive-router-rhobs.rhobs-int.svc.cluster.local:19291/api/v1/receive` | Thanos remote write endpoint URL |
+| `--prometheus-remote-write-tenant` | `PROMETHEUS_REMOTE_WRITE_TENANT` | `prometheus.remote_write_tenant` | `hcp` | Thanos tenant identifier |
+| `--prometheus-cpu-requests` | `PROMETHEUS_CPU_REQUESTS` | `prometheus.cpu_requests` | `100m` | CPU requests for Prometheus pod |
+| `--prometheus-cpu-limits` | `PROMETHEUS_CPU_LIMITS` | `prometheus.cpu_limits` | `500m` | CPU limits for Prometheus pod |
+| `--prometheus-memory-requests` | `PROMETHEUS_MEMORY_REQUESTS` | `prometheus.memory_requests` | `256Mi` | Memory requests for Prometheus pod |
+| `--prometheus-memory-limits` | `PROMETHEUS_MEMORY_LIMITS` | `prometheus.memory_limits` | `512Mi` | Memory limits for Prometheus pod |
+| `--prometheus-managed-by-operator` | `PROMETHEUS_MANAGED_BY_OPERATOR` | `prometheus.managed_by_operator` | `observability-operator` | Value for app.kubernetes.io/managed-by label on Prometheus resources |
 
 ## Architecture
 

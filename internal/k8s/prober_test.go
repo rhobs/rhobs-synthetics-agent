@@ -257,7 +257,21 @@ func TestNewBlackBoxProberManager(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			manager, err := NewBlackBoxProberManager(tt.namespace, "", cfg)
+			config := BlackBoxProberManagerConfig{
+				Namespace:         tt.namespace,
+				KubeconfigPath:    "",
+				Deployment:        cfg,
+				RemoteWriteURL:    "http://test-thanos:19291/api/v1/receive",
+				RemoteWriteTenant: "test-tenant",
+				PrometheusResources: PrometheusResourceConfig{
+					CPURequests:    "100m",
+					CPULimits:      "500m",
+					MemoryRequests: "256Mi",
+					MemoryLimits:   "512Mi",
+				},
+				ManagedByOperator: "test-operator",
+			}
+			manager, err := NewBlackBoxProberManager(config)
 
 			// The test can succeed OR fail depending on environment:
 			// - In local environment: kubeclient creation fails, manager is nil
@@ -313,4 +327,121 @@ func TestBlackBoxProberManager_GetProber_UnitTest(t *testing.T) {
 
 func TestBlackBoxProberManager_DeleteProber_UnitTest(t *testing.T) {
 	t.Skip("DeleteProber() requires real Kubernetes client - should be tested in integration tests")
+}
+
+func TestBlackBoxProberManager_PrometheusOperations(t *testing.T) {
+	// Test buildPrometheusResource without requiring K8s client
+	manager := &BlackBoxProberManager{
+		namespace:         "test-namespace",
+		remoteWriteURL:    "http://test-thanos:19291/api/v1/receive",
+		remoteWriteTenant: "test-tenant",
+		prometheusResources: PrometheusResourceConfig{
+			CPURequests:    "100m",
+			CPULimits:      "500m",
+			MemoryRequests: "256Mi",
+			MemoryLimits:   "512Mi",
+		},
+		managedByOperator: "test-operator",
+	}
+
+	// Test buildPrometheusResource
+	prometheusResource := manager.buildPrometheusResource()
+
+	// Verify basic structure
+	if prometheusResource.APIVersion != PrometheusAPIVersion {
+		t.Errorf("Expected apiVersion %q, got %q", PrometheusAPIVersion, prometheusResource.APIVersion)
+	}
+
+	if prometheusResource.Kind != PrometheusKind {
+		t.Errorf("Expected kind %q, got %q", PrometheusKind, prometheusResource.Kind)
+	}
+
+	// Verify metadata
+	if prometheusResource.Name != PrometheusResourceName {
+		t.Errorf("Expected name %q, got %q", PrometheusResourceName, prometheusResource.Name)
+	}
+
+	if prometheusResource.Namespace != "test-namespace" {
+		t.Errorf("Expected namespace 'test-namespace', got %q", prometheusResource.Namespace)
+	}
+
+	// Verify labels
+	if prometheusResource.Labels["app.kubernetes.io/managed-by"] != "test-operator" {
+		t.Errorf("Expected managed-by label 'test-operator', got %q", prometheusResource.Labels["app.kubernetes.io/managed-by"])
+	}
+
+	// Verify probeSelector
+	if prometheusResource.Spec.ProbeSelector == nil {
+		t.Fatal("Expected probeSelector to be non-nil")
+	}
+
+	if prometheusResource.Spec.ProbeSelector.MatchLabels["rhobs.monitoring/managed-by"] != SyntheticsAgentManagedByValue {
+		t.Errorf("Expected probe selector label %q, got %q", SyntheticsAgentManagedByValue, prometheusResource.Spec.ProbeSelector.MatchLabels["rhobs.monitoring/managed-by"])
+	}
+
+	// Verify remoteWrite
+	if len(prometheusResource.Spec.RemoteWrite) != 1 {
+		t.Fatalf("Expected 1 remoteWrite entry, got %d", len(prometheusResource.Spec.RemoteWrite))
+	}
+
+	remoteWrite := prometheusResource.Spec.RemoteWrite[0]
+	if remoteWrite.URL != "http://test-thanos:19291/api/v1/receive" {
+		t.Errorf("Expected remoteWrite URL 'http://test-thanos:19291/api/v1/receive', got %q", remoteWrite.URL)
+	}
+
+	if remoteWrite.Headers["THANOS-TENANT"] != "test-tenant" {
+		t.Errorf("Expected THANOS-TENANT header 'test-tenant', got %q", remoteWrite.Headers["THANOS-TENANT"])
+	}
+
+	// Verify resources
+	resources := prometheusResource.Spec.Resources
+
+	// Verify requests
+	if cpuRequest := resources.Requests[corev1.ResourceCPU]; cpuRequest.String() != "100m" {
+		t.Errorf("Expected CPU requests '100m', got %q", cpuRequest.String())
+	}
+
+	if memoryRequest := resources.Requests[corev1.ResourceMemory]; memoryRequest.String() != "256Mi" {
+		t.Errorf("Expected memory requests '256Mi', got %q", memoryRequest.String())
+	}
+
+	// Verify limits
+	if cpuLimit := resources.Limits[corev1.ResourceCPU]; cpuLimit.String() != "500m" {
+		t.Errorf("Expected CPU limits '500m', got %q", cpuLimit.String())
+	}
+
+	if memoryLimit := resources.Limits[corev1.ResourceMemory]; memoryLimit.String() != "512Mi" {
+		t.Errorf("Expected memory limits '512Mi', got %q", memoryLimit.String())
+	}
+}
+
+func TestBlackBoxProberManager_PrometheusResourceDefaults(t *testing.T) {
+	// Test default values without requiring K8s client
+	manager := &BlackBoxProberManager{
+		namespace:         "test-namespace",
+		managedByOperator: "observability-operator", // Default value
+	}
+
+	// Test that default managedByOperator is set
+	if manager.managedByOperator != "observability-operator" {
+		t.Errorf("Expected default managedByOperator 'observability-operator', got %q", manager.managedByOperator)
+	}
+
+	prometheusResource := manager.buildPrometheusResource()
+
+	if prometheusResource.Labels["app.kubernetes.io/managed-by"] != "observability-operator" {
+		t.Errorf("Expected default managed-by label 'observability-operator', got %q", prometheusResource.Labels["app.kubernetes.io/managed-by"])
+	}
+}
+
+func TestBlackBoxProberManager_CreatePrometheus_UnitTest(t *testing.T) {
+	t.Skip("CreatePrometheus() requires real Kubernetes client - should be tested in integration tests")
+}
+
+func TestBlackBoxProberManager_PrometheusExists_UnitTest(t *testing.T) {
+	t.Skip("PrometheusExists() requires real Kubernetes client - should be tested in integration tests")
+}
+
+func TestBlackBoxProberManager_DeletePrometheus_UnitTest(t *testing.T) {
+	t.Skip("DeletePrometheus() requires real Kubernetes client - should be tested in integration tests")
 }

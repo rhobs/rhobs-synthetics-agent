@@ -2,6 +2,7 @@ package agent
 
 import (
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -465,5 +466,161 @@ func TestConfig_String_WithAPIURLs(t *testing.T) {
 				t.Errorf("Config.String() = %q, expected %q", result, tt.expected)
 			}
 		})
+	}
+}
+
+func TestPrometheusConfig_Validate(t *testing.T) {
+	tests := []struct {
+		name        string
+		config      PrometheusConfig
+		expectError bool
+		errorMsg    string
+	}{
+		{
+			name: "valid config with all fields",
+			config: PrometheusConfig{
+				RemoteWriteURL:    "http://thanos:19291/api/v1/receive",
+				RemoteWriteTenant: "test-tenant",
+				CPURequests:       "100m",
+				CPULimits:         "500m",
+				MemoryRequests:    "256Mi",
+				MemoryLimits:      "512Mi",
+				ManagedByOperator: "observability-operator",
+			},
+			expectError: false,
+		},
+		{
+			name: "valid config with empty optional fields",
+			config: PrometheusConfig{
+				RemoteWriteURL:    "http://thanos:19291/api/v1/receive",
+				RemoteWriteTenant: "test-tenant",
+			},
+			expectError: false,
+		},
+		{
+			name: "invalid CPU requests format",
+			config: PrometheusConfig{
+				RemoteWriteURL:    "http://thanos:19291/api/v1/receive",
+				RemoteWriteTenant: "test-tenant",
+				CPURequests:       "invalid-cpu",
+			},
+			expectError: true,
+			errorMsg:    "invalid cpu_requests format",
+		},
+		{
+			name: "invalid CPU limits format",
+			config: PrometheusConfig{
+				RemoteWriteURL:    "http://thanos:19291/api/v1/receive",
+				RemoteWriteTenant: "test-tenant",
+				CPULimits:         "999xyz",
+			},
+			expectError: true,
+			errorMsg:    "invalid cpu_limits format",
+		},
+		{
+			name: "invalid memory requests format",
+			config: PrometheusConfig{
+				RemoteWriteURL:    "http://thanos:19291/api/v1/receive",
+				RemoteWriteTenant: "test-tenant",
+				MemoryRequests:    "not-a-memory-value",
+			},
+			expectError: true,
+			errorMsg:    "invalid memory_requests format",
+		},
+		{
+			name: "invalid memory limits format",
+			config: PrometheusConfig{
+				RemoteWriteURL:    "http://thanos:19291/api/v1/receive",
+				RemoteWriteTenant: "test-tenant",
+				MemoryLimits:      "1Zb",
+			},
+			expectError: true,
+			errorMsg:    "invalid memory_limits format",
+		},
+		{
+			name: "negative CPU requests",
+			config: PrometheusConfig{
+				RemoteWriteURL:    "http://thanos:19291/api/v1/receive",
+				RemoteWriteTenant: "test-tenant",
+				CPURequests:       "-100m",
+			},
+			expectError: true,
+			errorMsg:    "cpu_requests must be positive",
+		},
+		{
+			name: "zero memory limits should be invalid",
+			config: PrometheusConfig{
+				RemoteWriteURL:    "http://thanos:19291/api/v1/receive",
+				RemoteWriteTenant: "test-tenant",
+				MemoryLimits:      "0Mi",
+			},
+			expectError: true, // Zero resources don't make sense
+			errorMsg:    "memory_limits must be positive",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.config.Validate()
+			if tt.expectError {
+				if err == nil {
+					t.Errorf("Expected validation error but got none")
+				} else if tt.errorMsg != "" && !strings.Contains(err.Error(), tt.errorMsg) {
+					t.Errorf("Expected error containing %q, got %q", tt.errorMsg, err.Error())
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Unexpected validation error: %v", err)
+				}
+			}
+		})
+	}
+}
+
+func TestLoadConfig_PrometheusConfig(t *testing.T) {
+	// Reset viper to ensure clean state
+	viper.Reset()
+
+	// Set Prometheus-related Viper values directly (since LoadConfig doesn't set up env bindings)
+	viper.Set("prometheus.remote_write_url", "http://test-thanos:19291/api/v1/receive")
+	viper.Set("prometheus.remote_write_tenant", "test-tenant")
+	viper.Set("prometheus.cpu_requests", "200m")
+	viper.Set("prometheus.cpu_limits", "1000m")
+	viper.Set("prometheus.memory_requests", "512Mi")
+	viper.Set("prometheus.memory_limits", "1Gi")
+	viper.Set("prometheus.managed_by_operator", "custom-operator")
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig() failed: %v", err)
+	}
+
+	// Verify Prometheus configuration loaded correctly
+	if cfg.Prometheus.RemoteWriteURL != "http://test-thanos:19291/api/v1/receive" {
+		t.Errorf("Expected RemoteWriteURL to be 'http://test-thanos:19291/api/v1/receive', got %q", cfg.Prometheus.RemoteWriteURL)
+	}
+
+	if cfg.Prometheus.RemoteWriteTenant != "test-tenant" {
+		t.Errorf("Expected RemoteWriteTenant to be 'test-tenant', got %q", cfg.Prometheus.RemoteWriteTenant)
+	}
+
+	if cfg.Prometheus.CPURequests != "200m" {
+		t.Errorf("Expected CPURequests to be '200m', got %q", cfg.Prometheus.CPURequests)
+	}
+
+	if cfg.Prometheus.CPULimits != "1000m" {
+		t.Errorf("Expected CPULimits to be '1000m', got %q", cfg.Prometheus.CPULimits)
+	}
+
+	if cfg.Prometheus.MemoryRequests != "512Mi" {
+		t.Errorf("Expected MemoryRequests to be '512Mi', got %q", cfg.Prometheus.MemoryRequests)
+	}
+
+	if cfg.Prometheus.MemoryLimits != "1Gi" {
+		t.Errorf("Expected MemoryLimits to be '1Gi', got %q", cfg.Prometheus.MemoryLimits)
+	}
+
+	if cfg.Prometheus.ManagedByOperator != "custom-operator" {
+		t.Errorf("Expected ManagedByOperator to be 'custom-operator', got %q", cfg.Prometheus.ManagedByOperator)
 	}
 }

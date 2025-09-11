@@ -21,6 +21,7 @@ type Worker struct {
 	apiClients        []*api.Client
 	probeManager      *k8s.ProbeManager
 	proberManager     k8s.ProberManager
+	prometheusManager k8s.PrometheusManager
 	readinessCallback func(bool)
 }
 
@@ -66,10 +67,38 @@ func NewWorker(cfg *Config) (*Worker, error) {
 	var proberManager k8s.ProberManager
 	var err error
 	if kubeConfigPath != "" || kubeclient.IsRunningInK8sCluster() {
-		proberManager, err = k8s.NewBlackBoxProberManager(namespace, kubeConfigPath, blackboxDeploymentCfg)
+		// Create prober manager configuration
+		proberManagerConfig := k8s.BlackBoxProberManagerConfig{
+			Namespace:      namespace,
+			KubeconfigPath: kubeConfigPath,
+			Deployment:     blackboxDeploymentCfg,
+		}
+
+		// Set Prometheus configuration if config is provided
+		if cfg != nil {
+			proberManagerConfig.RemoteWriteURL = cfg.Prometheus.RemoteWriteURL
+			proberManagerConfig.RemoteWriteTenant = cfg.Prometheus.RemoteWriteTenant
+			proberManagerConfig.PrometheusResources = k8s.PrometheusResourceConfig{
+				CPURequests:    cfg.Prometheus.CPURequests,
+				CPULimits:      cfg.Prometheus.CPULimits,
+				MemoryRequests: cfg.Prometheus.MemoryRequests,
+				MemoryLimits:   cfg.Prometheus.MemoryLimits,
+			}
+			proberManagerConfig.ManagedByOperator = cfg.Prometheus.ManagedByOperator
+		} else {
+			// Default values when config is nil
+			proberManagerConfig.ManagedByOperator = "observability-operator"
+		}
+		proberManager, err = k8s.NewBlackBoxProberManager(proberManagerConfig)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create prober manager: %w", err)
 		}
+	}
+
+	// Type assert to ensure BlackBoxProberManager implements both interfaces
+	var prometheusManager k8s.PrometheusManager
+	if pm, ok := proberManager.(k8s.PrometheusManager); ok {
+		prometheusManager = pm
 	}
 
 	w := &Worker{
@@ -77,6 +106,7 @@ func NewWorker(cfg *Config) (*Worker, error) {
 		apiClients:        apiClients,
 		probeManager:      probeManager,
 		proberManager:     proberManager,
+		prometheusManager: prometheusManager,
 		readinessCallback: func(bool) {}, // no-op by default
 	}
 	return w, nil
@@ -120,14 +150,6 @@ func (w *Worker) Start(ctx context.Context, taskWG *sync.WaitGroup, shutdownChan
 			logger.Info("worker stopping due to shutdown signal")
 			return nil
 		case <-ticker.C:
-			// Check if shutdown is in progress before starting new tasks
-			select {
-			case <-shutdownChan:
-				logger.Info("shutdown in progress, skipping new probe processing")
-				return nil
-			default:
-			}
-
 			if err := w.processProbes(ctx, taskWG, shutdownChan); err != nil {
 				logger.Errorf("work iteration failed: %v\n", err)
 				// Continue running even if one iteration fails
@@ -135,19 +157,14 @@ func (w *Worker) Start(ctx context.Context, taskWG *sync.WaitGroup, shutdownChan
 			if err := w.processProbers(ctx, shutdownChan); err != nil {
 				logger.Errorf("failed to manage prober operands: %v\n", err)
 			}
+			if err := w.processPrometheus(ctx, shutdownChan); err != nil {
+				logger.Errorf("failed to manage prometheus instance: %v\n", err)
+			}
 		}
 	}
 }
 
 func (w *Worker) processProbes(ctx context.Context, taskWG *sync.WaitGroup, shutdownChan chan struct{}) error {
-	// Check if shutdown is in progress before starting new tasks
-	select {
-	case <-shutdownChan:
-		logger.Info("shutdown in progress, skipping probe processing")
-		return nil
-	default:
-	}
-
 	logger.Info("Starting probe reconciliation cycle")
 	reconciliationStart := time.Now()
 	var reconciliationErr error
@@ -352,9 +369,10 @@ func (w *Worker) manageProber(ctx context.Context, name string) error {
 
 // createProbe processes a single probe (extracted for testing)
 func (w *Worker) createProbe(ctx context.Context, probe api.Probe) error {
+	logger.Infof("Processing probe %s with target URL: %s", probe.ID, probe.StaticURL)
+
 	// Try to create the probe Custom Resource in Kubernetes
 	err := w.probeManager.CreateProbeK8sResource(probe, w.config.Blackbox.Probing)
-	logger.Infof("Processing probe %s with target URL: %s", probe.ID, probe.StaticURL)
 	if err != nil {
 		// If K8s creation fails, fall back to logging the resource definition
 		logger.Infof("Failed to create Kubernetes resource (falling back to logging): %v", err)
@@ -374,11 +392,9 @@ func (w *Worker) createProbe(ctx context.Context, probe api.Probe) error {
 
 		logger.Infof("Probe %s processed (logged only - not running in compatible K8s cluster)", probe.ID)
 		w.updateProbeStatus(probe.ID, "active")
-		metrics.RecordProbeResourceOperation("create", true)
 	} else {
 		logger.Infof("Successfully created monitoring.coreos.com/v1 Probe resource for probe %s", probe.ID)
 		w.updateProbeStatus(probe.ID, "active")
-		metrics.RecordProbeResourceOperation("create", true)
 	}
 	return nil
 }
@@ -414,20 +430,54 @@ func (w *Worker) deleteProbe(ctx context.Context, shutdownChan chan struct{}) er
 }
 
 func (w *Worker) setStatusSelector(ctx context.Context, statusSelector string) (string, error) {
-	label_selector := w.config.LabelSelector
+	labelSelector := w.config.LabelSelector
 	switch statusSelector {
 	case "terminating":
-		label_selector = fmt.Sprintf("%s,rhobs-synthetics/status=terminating", w.config.LabelSelector)
+		labelSelector = fmt.Sprintf("%s,rhobs-synthetics/status=terminating", w.config.LabelSelector)
 	case "pending":
-		label_selector = fmt.Sprintf("%s,rhobs-synthetics/status=pending", w.config.LabelSelector)
+		labelSelector = fmt.Sprintf("%s,rhobs-synthetics/status=pending", w.config.LabelSelector)
 	case "failed":
-		label_selector = fmt.Sprintf("%s,rhobs-synthetics/status=failed", w.config.LabelSelector)
+		labelSelector = fmt.Sprintf("%s,rhobs-synthetics/status=failed", w.config.LabelSelector)
 	case "active":
-		label_selector = fmt.Sprintf("%s,rhobs-synthetics/status=active", w.config.LabelSelector)
+		labelSelector = fmt.Sprintf("%s,rhobs-synthetics/status=active", w.config.LabelSelector)
 	case "deleted":
-		label_selector = fmt.Sprintf("%s,rhobs-synthetics/status=deleted", w.config.LabelSelector)
+		labelSelector = fmt.Sprintf("%s,rhobs-synthetics/status=deleted", w.config.LabelSelector)
 	default:
 	}
-	return label_selector, nil
+	return labelSelector, nil
+}
 
+func (w *Worker) processPrometheus(ctx context.Context, shutdownChan chan struct{}) error {
+	if w.prometheusManager == nil {
+		return nil
+	}
+
+	logger.Debug("reconciling prometheus instance")
+	err := w.managePrometheus(ctx)
+	if err != nil {
+		logger.Errorf("failed to reconcile prometheus instance: %v", err)
+		return err
+	}
+	return nil
+}
+
+func (w *Worker) managePrometheus(ctx context.Context) error {
+	if w.prometheusManager == nil {
+		return nil
+	}
+	found, err := w.prometheusManager.PrometheusExists(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to retrieve prometheus instance: %w", err)
+	}
+	if !found {
+		logger.Info("prometheus instance not found; creating new prometheus instance")
+		err = w.prometheusManager.CreatePrometheus(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to create prometheus instance: %w", err)
+		}
+		logger.Info("successfully created prometheus instance for synthetic monitoring")
+	} else {
+		logger.Debug("prometheus instance already exists")
+	}
+	return nil
 }
