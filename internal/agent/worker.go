@@ -66,14 +66,21 @@ func NewWorker(cfg *Config) (*Worker, error) {
 	var proberManager k8s.ProberManager
 	var err error
 	if kubeConfigPath != "" || kubeclient.IsRunningInK8sCluster() {
-		// Create Prometheus resource configuration from config
-		prometheusResources := k8s.PrometheusResourceConfig{
-			CPURequests:    cfg.Prometheus.CPURequests,
-			CPULimits:      cfg.Prometheus.CPULimits,
-			MemoryRequests: cfg.Prometheus.MemoryRequests,
-			MemoryLimits:   cfg.Prometheus.MemoryLimits,
+		// Create prober manager configuration
+		proberManagerConfig := k8s.BlackBoxProberManagerConfig{
+			Namespace:         namespace,
+			KubeconfigPath:    kubeConfigPath,
+			Deployment:        blackboxDeploymentCfg,
+			RemoteWriteURL:    cfg.Prometheus.RemoteWriteURL,
+			RemoteWriteTenant: cfg.Prometheus.RemoteWriteTenant,
+			PrometheusResources: k8s.PrometheusResourceConfig{
+				CPURequests:    cfg.Prometheus.CPURequests,
+				CPULimits:      cfg.Prometheus.CPULimits,
+				MemoryRequests: cfg.Prometheus.MemoryRequests,
+				MemoryLimits:   cfg.Prometheus.MemoryLimits,
+			},
 		}
-		proberManager, err = k8s.NewBlackBoxProberManager(namespace, kubeConfigPath, blackboxDeploymentCfg, cfg.Prometheus.RemoteWriteURL, cfg.Prometheus.RemoteWriteTenant, prometheusResources)
+		proberManager, err = k8s.NewBlackBoxProberManager(proberManagerConfig)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create prober manager: %w", err)
 		}

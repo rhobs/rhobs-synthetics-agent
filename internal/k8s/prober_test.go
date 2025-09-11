@@ -257,13 +257,20 @@ func TestNewBlackBoxProberManager(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			prometheusResources := PrometheusResourceConfig{
-				CPURequests:    "100m",
-				CPULimits:      "500m",
-				MemoryRequests: "256Mi",
-				MemoryLimits:   "512Mi",
+			config := BlackBoxProberManagerConfig{
+				Namespace:         tt.namespace,
+				KubeconfigPath:    "",
+				Deployment:        cfg,
+				RemoteWriteURL:    "http://test-thanos:19291/api/v1/receive",
+				RemoteWriteTenant: "test-tenant",
+				PrometheusResources: PrometheusResourceConfig{
+					CPURequests:    "100m",
+					CPULimits:      "500m",
+					MemoryRequests: "256Mi",
+					MemoryLimits:   "512Mi",
+				},
 			}
-			manager, err := NewBlackBoxProberManager(tt.namespace, "", cfg, "http://test-thanos:19291/api/v1/receive", "test-tenant", prometheusResources)
+			manager, err := NewBlackBoxProberManager(config)
 
 			// The test can succeed OR fail depending on environment:
 			// - In local environment: kubeclient creation fails, manager is nil

@@ -3,6 +3,7 @@ package k8s
 import (
 	"context"
 	"fmt"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -77,17 +78,29 @@ type PrometheusResourceConfig struct {
 	MemoryLimits   string
 }
 
-// func NewBlackBoxProberManager(namespace string, kubeconfigPath string, opts... BlackBoxProberOption) (*BlackBoxProberManager, error) {
-func NewBlackBoxProberManager(namespace string, kubeconfigPath string, cfg BlackboxDeploymentConfig, remoteWriteURL string, remoteWriteTenant string, prometheusResources PrometheusResourceConfig) (*BlackBoxProberManager, error) {
-	client, err := kubeclient.NewClient(kubeclient.Config{KubeconfigPath: kubeconfigPath})
+// BlackBoxProberManagerConfig holds the configuration for creating a BlackBoxProberManager
+type BlackBoxProberManagerConfig struct {
+	Namespace           string
+	KubeconfigPath      string
+	Deployment          BlackboxDeploymentConfig
+	RemoteWriteURL      string
+	RemoteWriteTenant   string
+	PrometheusResources PrometheusResourceConfig
+}
+
+// NewBlackBoxProberManager creates a new BlackBoxProberManager with the provided configuration
+func NewBlackBoxProberManager(config BlackBoxProberManagerConfig) (*BlackBoxProberManager, error) {
+	client, err := kubeclient.NewClient(kubeclient.Config{KubeconfigPath: config.KubeconfigPath})
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize Kubernetes client: %w", err)
 	}
 
+	namespace := config.Namespace
 	if namespace == "" {
 		namespace = DefaultBlackBoxProberManagerNamespace
 	}
 
+	remoteWriteURL := config.RemoteWriteURL
 	if remoteWriteURL == "" {
 		remoteWriteURL = fmt.Sprintf("http://thanos-receive-router-rhobs.%s.svc.cluster.local:19291/api/v1/receive", namespace)
 	}
@@ -95,10 +108,10 @@ func NewBlackBoxProberManager(namespace string, kubeconfigPath string, cfg Black
 	manager := &BlackBoxProberManager{
 		kubeClient:          client,
 		namespace:           namespace,
-		cfg:                 cfg,
+		cfg:                 config.Deployment,
 		remoteWriteURL:      remoteWriteURL,
-		remoteWriteTenant:   remoteWriteTenant,
-		prometheusResources: prometheusResources,
+		remoteWriteTenant:   config.RemoteWriteTenant,
+		prometheusResources: config.PrometheusResources,
 	}
 	return manager, nil
 }
@@ -191,35 +204,50 @@ func (m *BlackBoxProberManager) DeleteProber(ctx context.Context, name string) e
 }
 
 func (m *BlackBoxProberManager) GetPrometheus(ctx context.Context) (found bool, err error) {
+	// Add timeout for the operation
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
 	_, err = m.prometheusClient().Get(ctx, PrometheusResourceName, metav1.GetOptions{})
 	if err != nil {
 		if kerr.IsNotFound(err) {
 			return false, nil
 		}
-		return false, fmt.Errorf("failed to GET prometheus %q: %w", fmt.Sprintf("%s/%s", m.namespace, PrometheusResourceName), err)
+		return false, fmt.Errorf("failed to GET prometheus %q: %w",
+			fmt.Sprintf("%s/%s", m.namespace, PrometheusResourceName), err)
 	}
 	return true, nil
 }
 
 func (m *BlackBoxProberManager) CreatePrometheus(ctx context.Context) error {
+	// Add timeout for the operation
+	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	defer cancel()
+
 	prometheus := m.buildPrometheusResource()
-	unstructuredPrometheus, err := convertToUnstructured(&prometheus)
+	unstructuredPrometheus, err := convertToUnstructured(prometheus)
 	if err != nil {
 		return fmt.Errorf("failed to convert prometheus to unstructured object: %w", err)
 	}
 
 	_, err = m.prometheusClient().Create(ctx, unstructuredPrometheus, metav1.CreateOptions{})
 	if err != nil {
-		return fmt.Errorf("failed to CREATE prometheus %q: %w", fmt.Sprintf("%s/%s", prometheus["metadata"].(map[string]interface{})["namespace"], prometheus["metadata"].(map[string]interface{})["name"]), err)
+		return fmt.Errorf("failed to CREATE prometheus %q: %w",
+			fmt.Sprintf("%s/%s", m.namespace, PrometheusResourceName), err)
 	}
 
 	return nil
 }
 
 func (m *BlackBoxProberManager) DeletePrometheus(ctx context.Context) error {
+	// Add timeout for cleanup operation
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
 	err := m.prometheusClient().Delete(ctx, PrometheusResourceName, metav1.DeleteOptions{})
 	if err != nil && !kerr.IsNotFound(err) {
-		return fmt.Errorf("failed to DELETE prometheus %q: %w", fmt.Sprintf("%s/%s", m.namespace, PrometheusResourceName), err)
+		return fmt.Errorf("failed to DELETE prometheus %q: %w",
+			fmt.Sprintf("%s/%s", m.namespace, PrometheusResourceName), err)
 	}
 	return nil
 }
