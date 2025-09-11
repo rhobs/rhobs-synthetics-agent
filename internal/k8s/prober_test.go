@@ -348,117 +348,70 @@ func TestBlackBoxProberManager_PrometheusOperations(t *testing.T) {
 	prometheusResource := manager.buildPrometheusResource()
 
 	// Verify basic structure
-	if prometheusResource["apiVersion"] != PrometheusAPIVersion {
-		t.Errorf("Expected apiVersion %q, got %q", PrometheusAPIVersion, prometheusResource["apiVersion"])
+	if prometheusResource.APIVersion != PrometheusAPIVersion {
+		t.Errorf("Expected apiVersion %q, got %q", PrometheusAPIVersion, prometheusResource.APIVersion)
 	}
 
-	if prometheusResource["kind"] != PrometheusKind {
-		t.Errorf("Expected kind %q, got %q", PrometheusKind, prometheusResource["kind"])
+	if prometheusResource.Kind != PrometheusKind {
+		t.Errorf("Expected kind %q, got %q", PrometheusKind, prometheusResource.Kind)
 	}
 
 	// Verify metadata
-	metadata, ok := prometheusResource["metadata"].(map[string]interface{})
-	if !ok {
-		t.Fatal("Expected metadata to be a map")
+	if prometheusResource.Name != PrometheusResourceName {
+		t.Errorf("Expected name %q, got %q", PrometheusResourceName, prometheusResource.Name)
 	}
 
-	if metadata["name"] != PrometheusResourceName {
-		t.Errorf("Expected name %q, got %q", PrometheusResourceName, metadata["name"])
-	}
-
-	if metadata["namespace"] != "test-namespace" {
-		t.Errorf("Expected namespace 'test-namespace', got %q", metadata["namespace"])
+	if prometheusResource.Namespace != "test-namespace" {
+		t.Errorf("Expected namespace 'test-namespace', got %q", prometheusResource.Namespace)
 	}
 
 	// Verify labels
-	labels, ok := metadata["labels"].(map[string]interface{})
-	if !ok {
-		t.Fatal("Expected labels to be a map")
-	}
-
-	if labels["app.kubernetes.io/managed-by"] != "test-operator" {
-		t.Errorf("Expected managed-by label 'test-operator', got %q", labels["app.kubernetes.io/managed-by"])
-	}
-
-	// Verify spec
-	spec, ok := prometheusResource["spec"].(map[string]interface{})
-	if !ok {
-		t.Fatal("Expected spec to be a map")
+	if prometheusResource.Labels["app.kubernetes.io/managed-by"] != "test-operator" {
+		t.Errorf("Expected managed-by label 'test-operator', got %q", prometheusResource.Labels["app.kubernetes.io/managed-by"])
 	}
 
 	// Verify probeSelector
-	probeSelector, ok := spec["probeSelector"].(map[string]interface{})
-	if !ok {
-		t.Fatal("Expected probeSelector to be a map")
+	if prometheusResource.Spec.ProbeSelector == nil {
+		t.Fatal("Expected probeSelector to be non-nil")
 	}
 
-	matchLabels, ok := probeSelector["matchLabels"].(map[string]interface{})
-	if !ok {
-		t.Fatal("Expected matchLabels to be a map")
-	}
-
-	if matchLabels["rhobs.monitoring/managed-by"] != SyntheticsAgentManagedByValue {
-		t.Errorf("Expected probe selector label %q, got %q", SyntheticsAgentManagedByValue, matchLabels["rhobs.monitoring/managed-by"])
+	if prometheusResource.Spec.ProbeSelector.MatchLabels["rhobs.monitoring/managed-by"] != SyntheticsAgentManagedByValue {
+		t.Errorf("Expected probe selector label %q, got %q", SyntheticsAgentManagedByValue, prometheusResource.Spec.ProbeSelector.MatchLabels["rhobs.monitoring/managed-by"])
 	}
 
 	// Verify remoteWrite
-	remoteWrites, ok := spec["remoteWrite"].([]interface{})
-	if !ok {
-		t.Fatal("Expected remoteWrite to be a slice")
+	if len(prometheusResource.Spec.RemoteWrite) != 1 {
+		t.Fatalf("Expected 1 remoteWrite entry, got %d", len(prometheusResource.Spec.RemoteWrite))
 	}
 
-	if len(remoteWrites) != 1 {
-		t.Fatalf("Expected 1 remoteWrite entry, got %d", len(remoteWrites))
+	remoteWrite := prometheusResource.Spec.RemoteWrite[0]
+	if remoteWrite.URL != "http://test-thanos:19291/api/v1/receive" {
+		t.Errorf("Expected remoteWrite URL 'http://test-thanos:19291/api/v1/receive', got %q", remoteWrite.URL)
 	}
 
-	remoteWrite, ok := remoteWrites[0].(map[string]interface{})
-	if !ok {
-		t.Fatal("Expected remoteWrite entry to be a map")
-	}
-
-	if remoteWrite["url"] != "http://test-thanos:19291/api/v1/receive" {
-		t.Errorf("Expected remoteWrite URL 'http://test-thanos:19291/api/v1/receive', got %q", remoteWrite["url"])
-	}
-
-	headers, ok := remoteWrite["headers"].(map[string]interface{})
-	if !ok {
-		t.Fatal("Expected headers to be a map")
-	}
-
-	if headers["THANOS-TENANT"] != "test-tenant" {
-		t.Errorf("Expected THANOS-TENANT header 'test-tenant', got %q", headers["THANOS-TENANT"])
+	if remoteWrite.Headers["THANOS-TENANT"] != "test-tenant" {
+		t.Errorf("Expected THANOS-TENANT header 'test-tenant', got %q", remoteWrite.Headers["THANOS-TENANT"])
 	}
 
 	// Verify resources
-	resources, ok := spec["resources"].(map[string]interface{})
-	if !ok {
-		t.Fatal("Expected resources to be a map")
+	resources := prometheusResource.Spec.Resources
+
+	// Verify requests
+	if cpuRequest := resources.Requests[corev1.ResourceCPU]; cpuRequest.String() != "100m" {
+		t.Errorf("Expected CPU requests '100m', got %q", cpuRequest.String())
 	}
 
-	requests, ok := resources["requests"].(map[string]interface{})
-	if !ok {
-		t.Fatal("Expected requests to be a map")
+	if memoryRequest := resources.Requests[corev1.ResourceMemory]; memoryRequest.String() != "256Mi" {
+		t.Errorf("Expected memory requests '256Mi', got %q", memoryRequest.String())
 	}
 
-	if requests["cpu"] != "100m" {
-		t.Errorf("Expected CPU requests '100m', got %q", requests["cpu"])
+	// Verify limits
+	if cpuLimit := resources.Limits[corev1.ResourceCPU]; cpuLimit.String() != "500m" {
+		t.Errorf("Expected CPU limits '500m', got %q", cpuLimit.String())
 	}
 
-	if requests["memory"] != "256Mi" {
-		t.Errorf("Expected memory requests '256Mi', got %q", requests["memory"])
-	}
-
-	limits, ok := resources["limits"].(map[string]interface{})
-	if !ok {
-		t.Fatal("Expected limits to be a map")
-	}
-
-	if limits["cpu"] != "500m" {
-		t.Errorf("Expected CPU limits '500m', got %q", limits["cpu"])
-	}
-
-	if limits["memory"] != "512Mi" {
-		t.Errorf("Expected memory limits '512Mi', got %q", limits["memory"])
+	if memoryLimit := resources.Limits[corev1.ResourceMemory]; memoryLimit.String() != "512Mi" {
+		t.Errorf("Expected memory limits '512Mi', got %q", memoryLimit.String())
 	}
 }
 
@@ -475,18 +428,9 @@ func TestBlackBoxProberManager_PrometheusResourceDefaults(t *testing.T) {
 	}
 
 	prometheusResource := manager.buildPrometheusResource()
-	metadata, ok := prometheusResource["metadata"].(map[string]interface{})
-	if !ok {
-		t.Fatal("Expected metadata to be a map")
-	}
 
-	labels, ok := metadata["labels"].(map[string]interface{})
-	if !ok {
-		t.Fatal("Expected labels to be a map")
-	}
-
-	if labels["app.kubernetes.io/managed-by"] != "observability-operator" {
-		t.Errorf("Expected default managed-by label 'observability-operator', got %q", labels["app.kubernetes.io/managed-by"])
+	if prometheusResource.Labels["app.kubernetes.io/managed-by"] != "observability-operator" {
+		t.Errorf("Expected default managed-by label 'observability-operator', got %q", prometheusResource.Labels["app.kubernetes.io/managed-by"])
 	}
 }
 

@@ -8,11 +8,13 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	kerr "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/dynamic"
 
+	promv1 "github.com/rhobs/obo-prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/rhobs/rhobs-synthetics-api/pkg/kubeclient"
 )
 
@@ -263,48 +265,60 @@ func (m *BlackBoxProberManager) DeletePrometheus(ctx context.Context) error {
 
 // buildPrometheusResource creates a Prometheus resource for synthetic monitoring
 // based on the configuration from obs-prometheus-rhobs.yaml
-func (m *BlackBoxProberManager) buildPrometheusResource() map[string]interface{} {
-	labels := map[string]interface{}{
+func (m *BlackBoxProberManager) buildPrometheusResource() *promv1.Prometheus {
+	labels := map[string]string{
 		"app.kubernetes.io/managed-by": m.managedByOperator,
 	}
 
-	prometheus := map[string]interface{}{
-		"apiVersion": PrometheusAPIVersion,
-		"kind":       PrometheusKind,
-		"metadata": map[string]interface{}{
-			"name":      PrometheusResourceName,
-			"namespace": m.namespace,
-			"labels":    labels,
+	return &promv1.Prometheus{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: PrometheusAPIVersion,
+			Kind:       PrometheusKind,
 		},
-		"spec": map[string]interface{}{
-			"probeNamespaceSelector": map[string]interface{}{},
-			"probeSelector": map[string]interface{}{
-				"matchLabels": map[string]interface{}{
-					"rhobs.monitoring/managed-by": SyntheticsAgentManagedByValue,
-				},
-			},
-			"remoteWrite": []interface{}{
-				map[string]interface{}{
-					"url": m.remoteWriteURL,
-					"headers": map[string]interface{}{
-						"THANOS-TENANT": m.remoteWriteTenant,
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      PrometheusResourceName,
+			Namespace: m.namespace,
+			Labels:    labels,
+		},
+		Spec: promv1.PrometheusSpec{
+			CommonPrometheusFields: promv1.CommonPrometheusFields{
+				ProbeNamespaceSelector: &metav1.LabelSelector{},
+				ProbeSelector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						"rhobs.monitoring/managed-by": SyntheticsAgentManagedByValue,
 					},
 				},
-			},
-			"resources": map[string]interface{}{
-				"requests": map[string]interface{}{
-					"cpu":    m.prometheusResources.CPURequests,
-					"memory": m.prometheusResources.MemoryRequests,
+				RemoteWrite: []promv1.RemoteWriteSpec{
+					{
+						URL: m.remoteWriteURL,
+						Headers: map[string]string{
+							"THANOS-TENANT": m.remoteWriteTenant,
+						},
+					},
 				},
-				"limits": map[string]interface{}{
-					"cpu":    m.prometheusResources.CPULimits,
-					"memory": m.prometheusResources.MemoryLimits,
+				Resources: corev1.ResourceRequirements{
+					Requests: corev1.ResourceList{
+						corev1.ResourceCPU:    parseResourceQuantity(m.prometheusResources.CPURequests),
+						corev1.ResourceMemory: parseResourceQuantity(m.prometheusResources.MemoryRequests),
+					},
+					Limits: corev1.ResourceList{
+						corev1.ResourceCPU:    parseResourceQuantity(m.prometheusResources.CPULimits),
+						corev1.ResourceMemory: parseResourceQuantity(m.prometheusResources.MemoryLimits),
+					},
 				},
 			},
 		},
 	}
+}
 
-	return prometheus
+// parseResourceQuantity safely parses a resource quantity string
+func parseResourceQuantity(resourceStr string) resource.Quantity {
+	quantity, err := resource.ParseQuantity(resourceStr)
+	if err != nil {
+		// Return zero quantity if parsing fails (should not happen with validated config)
+		return resource.Quantity{}
+	}
+	return quantity
 }
 
 func (m *BlackBoxProberManager) buildProberDeployment(proberName string) appsv1.Deployment {
