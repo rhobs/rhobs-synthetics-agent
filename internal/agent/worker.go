@@ -79,6 +79,7 @@ func NewWorker(cfg *Config) (*Worker, error) {
 				MemoryRequests: cfg.Prometheus.MemoryRequests,
 				MemoryLimits:   cfg.Prometheus.MemoryLimits,
 			},
+			ManagedByOperator: cfg.Prometheus.ManagedByOperator,
 		}
 		proberManager, err = k8s.NewBlackBoxProberManager(proberManagerConfig)
 		if err != nil {

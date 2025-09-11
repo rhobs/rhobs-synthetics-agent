@@ -39,6 +39,7 @@ type PrometheusConfig struct {
 	CPULimits         string `mapstructure:"cpu_limits"`
 	MemoryRequests    string `mapstructure:"memory_requests"`
 	MemoryLimits      string `mapstructure:"memory_limits"`
+	ManagedByOperator string `mapstructure:"managed_by_operator"`
 }
 
 // Validate validates the PrometheusConfig fields

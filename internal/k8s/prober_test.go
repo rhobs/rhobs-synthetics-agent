@@ -269,6 +269,7 @@ func TestNewBlackBoxProberManager(t *testing.T) {
 					MemoryRequests: "256Mi",
 					MemoryLimits:   "512Mi",
 				},
+				ManagedByOperator: "test-operator",
 			}
 			manager, err := NewBlackBoxProberManager(config)
 

@@ -68,6 +68,8 @@ type BlackBoxProberManager struct {
 	remoteWriteTenant string
 	// prometheusResources defines the CPU and memory resource configuration for Prometheus
 	prometheusResources PrometheusResourceConfig
+	// managedByOperator defines the value for app.kubernetes.io/managed-by label on Prometheus resources
+	managedByOperator string
 }
 
 // PrometheusResourceConfig holds the resource configuration for Prometheus pods
@@ -86,6 +88,7 @@ type BlackBoxProberManagerConfig struct {
 	RemoteWriteURL      string
 	RemoteWriteTenant   string
 	PrometheusResources PrometheusResourceConfig
+	ManagedByOperator   string
 }
 
 // NewBlackBoxProberManager creates a new BlackBoxProberManager with the provided configuration
@@ -105,6 +108,11 @@ func NewBlackBoxProberManager(config BlackBoxProberManagerConfig) (*BlackBoxProb
 		remoteWriteURL = fmt.Sprintf("http://thanos-receive-router-rhobs.%s.svc.cluster.local:19291/api/v1/receive", namespace)
 	}
 
+	managedByOperator := config.ManagedByOperator
+	if managedByOperator == "" {
+		managedByOperator = "observability-operator"
+	}
+
 	manager := &BlackBoxProberManager{
 		kubeClient:          client,
 		namespace:           namespace,
@@ -112,6 +120,7 @@ func NewBlackBoxProberManager(config BlackBoxProberManagerConfig) (*BlackBoxProb
 		remoteWriteURL:      remoteWriteURL,
 		remoteWriteTenant:   config.RemoteWriteTenant,
 		prometheusResources: config.PrometheusResources,
+		managedByOperator:   managedByOperator,
 	}
 	return manager, nil
 }
@@ -256,7 +265,7 @@ func (m *BlackBoxProberManager) DeletePrometheus(ctx context.Context) error {
 // based on the configuration from obs-prometheus-rhobs.yaml
 func (m *BlackBoxProberManager) buildPrometheusResource() map[string]interface{} {
 	labels := map[string]interface{}{
-		"app.kubernetes.io/managed-by": "observability-operator",
+		"app.kubernetes.io/managed-by": m.managedByOperator,
 	}
 
 	prometheus := map[string]interface{}{

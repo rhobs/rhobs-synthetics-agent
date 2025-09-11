@@ -74,6 +74,7 @@ func main() {
 	startCmd.Flags().String("prometheus-cpu-limits", "500m", "CPU limits for Prometheus pod")
 	startCmd.Flags().String("prometheus-memory-requests", "256Mi", "Memory requests for Prometheus pod")
 	startCmd.Flags().String("prometheus-memory-limits", "512Mi", "Memory limits for Prometheus pod")
+	startCmd.Flags().String("prometheus-managed-by-operator", "observability-operator", "Value for app.kubernetes.io/managed-by label on Prometheus resources")
 
 	// Bind flags to viper
 	_ = viper.BindPFlag("config", startCmd.Flags().Lookup("config"))
@@ -89,6 +90,7 @@ func main() {
 	_ = viper.BindPFlag("prometheus.cpu_limits", startCmd.Flags().Lookup("prometheus-cpu-limits"))
 	_ = viper.BindPFlag("prometheus.memory_requests", startCmd.Flags().Lookup("prometheus-memory-requests"))
 	_ = viper.BindPFlag("prometheus.memory_limits", startCmd.Flags().Lookup("prometheus-memory-limits"))
+	_ = viper.BindPFlag("prometheus.managed_by_operator", startCmd.Flags().Lookup("prometheus-managed-by-operator"))
 
 	// Add commands to the root command
 	rootCmd.AddCommand(startCmd)
