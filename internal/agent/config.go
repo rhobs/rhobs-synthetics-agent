@@ -2,12 +2,12 @@ package agent
 
 import (
 	"fmt"
-	"regexp"
 	"strings"
 	"time"
 
 	"github.com/rhobs/rhobs-synthetics-agent/internal/k8s"
 	"github.com/spf13/viper"
+	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 type Config struct {
@@ -71,30 +71,18 @@ func (pc *PrometheusConfig) Validate() error {
 	return nil
 }
 
-// validateResourceString validates Kubernetes resource string formats
+// validateResourceString validates Kubernetes resource string formats using the official K8s parser
 // Assumes value is not empty (caller should check for emptiness)
 func validateResourceString(value, fieldName string) error {
-	// Kubernetes resource patterns
-	// CPU: millicores (m) or full cores (no suffix), e.g., "100m", "0.5", "2"
-	// Memory: bytes with suffixes like Ki, Mi, Gi, Ti, Pi, Ei or K, M, G, T, P, E
-	cpuPattern := `^(\d+(\.\d+)?|\d+m)$`
-	memoryPattern := `^(\d+(\.\d+)?[KMGTPE]?i?|\d+)$`
-
-	var pattern string
-	if strings.Contains(fieldName, "cpu") {
-		pattern = cpuPattern
-	} else if strings.Contains(fieldName, "memory") {
-		pattern = memoryPattern
-	} else {
-		return nil // Unknown field type, skip validation
-	}
-
-	matched, err := regexp.MatchString(pattern, value)
+	// Use the official Kubernetes resource quantity parser
+	quantity, err := resource.ParseQuantity(value)
 	if err != nil {
-		return fmt.Errorf("error validating %s format: %w", fieldName, err)
+		return fmt.Errorf("invalid %s format: %s (%w)", fieldName, value, err)
 	}
-	if !matched {
-		return fmt.Errorf("invalid %s format: %s (expected Kubernetes resource format)", fieldName, value)
+
+	// Check if the quantity is positive (negative resources don't make sense)
+	if quantity.Sign() <= 0 {
+		return fmt.Errorf("%s must be positive, got: %s", fieldName, value)
 	}
 
 	return nil

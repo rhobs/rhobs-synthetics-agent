@@ -545,16 +545,17 @@ func TestPrometheusConfig_Validate(t *testing.T) {
 				CPURequests:       "-100m",
 			},
 			expectError: true,
-			errorMsg:    "invalid cpu_requests format",
+			errorMsg:    "cpu_requests must be positive",
 		},
 		{
-			name: "zero memory limits is valid",
+			name: "zero memory limits should be invalid",
 			config: PrometheusConfig{
 				RemoteWriteURL:    "http://thanos:19291/api/v1/receive",
 				RemoteWriteTenant: "test-tenant",
 				MemoryLimits:      "0Mi",
 			},
-			expectError: false, // 0Mi is a valid format according to regex
+			expectError: true, // Zero resources don't make sense
+			errorMsg:    "memory_limits must be positive",
 		},
 	}
 
