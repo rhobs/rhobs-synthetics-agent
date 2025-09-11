@@ -149,11 +149,7 @@ func (m *BlackBoxProberManager) serviceClient() dynamic.ResourceInterface {
 
 // prometheusClient is a helper function to interact with monitoring.rhobs/v1 Prometheus objects
 func (m *BlackBoxProberManager) prometheusClient() dynamic.ResourceInterface {
-	prometheusGVR := schema.GroupVersionResource{
-		Group:    "monitoring.rhobs",
-		Version:  "v1",
-		Resource: "prometheuses",
-	}
+	prometheusGVR := promv1.SchemeGroupVersion.WithResource(promv1.Resource("prometheuses").Resource)
 	return m.kubeClient.DynamicClient().Resource(prometheusGVR).Namespace(m.namespace)
 }
 
