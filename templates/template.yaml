@@ -27,6 +27,10 @@ objects:
     - apiGroups: ["monitoring.rhobs"]
       resources: ["probes"]
       verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+    # Access to Prometheus CRDs (monitoring.rhobs/v1)
+    - apiGroups: ["monitoring.rhobs"]
+      resources: ["prometheuses"]
+      verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
     # Access to Probe CRDs (monitoring.coreos.com/v1) - alternative API group
     - apiGroups: ["monitoring.coreos.com"]
       resources: ["probes"]
