@@ -23,8 +23,8 @@ type ProberManager interface {
 	CreateProber(ctx context.Context, name string) (p Prober, err error)
 	// DeleteProber removes a Prober with the given name
 	DeleteProber(ctx context.Context, name string) (err error)
-	// GetPrometheus retrieves the Prometheus instance for this manager
-	GetPrometheus(ctx context.Context) (found bool, err error)
+	// PrometheusExists checks if the Prometheus instance exists for this manager
+	PrometheusExists(ctx context.Context) (found bool, err error)
 	// CreatePrometheus creates a Prometheus instance for synthetic monitoring
 	CreatePrometheus(ctx context.Context) (err error)
 	// DeletePrometheus removes the Prometheus instance
@@ -212,7 +212,7 @@ func (m *BlackBoxProberManager) DeleteProber(ctx context.Context, name string) e
 	return nil
 }
 
-func (m *BlackBoxProberManager) GetPrometheus(ctx context.Context) (found bool, err error) {
+func (m *BlackBoxProberManager) PrometheusExists(ctx context.Context) (found bool, err error) {
 	// Add timeout for the operation
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()

@@ -494,8 +494,8 @@ func TestBlackBoxProberManager_CreatePrometheus_UnitTest(t *testing.T) {
 	t.Skip("CreatePrometheus() requires real Kubernetes client - should be tested in integration tests")
 }
 
-func TestBlackBoxProberManager_GetPrometheus_UnitTest(t *testing.T) {
-	t.Skip("GetPrometheus() requires real Kubernetes client - should be tested in integration tests")
+func TestBlackBoxProberManager_PrometheusExists_UnitTest(t *testing.T) {
+	t.Skip("PrometheusExists() requires real Kubernetes client - should be tested in integration tests")
 }
 
 func TestBlackBoxProberManager_DeletePrometheus_UnitTest(t *testing.T) {
