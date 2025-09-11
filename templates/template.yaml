@@ -280,7 +280,7 @@ parameters:
 - name: LABEL_SELECTOR
   displayName: Label Selector
   description: Label selector for filtering probes
-  value: private=false,rhobs-synthetics/status=pending
+  value: private=false
   required: true
 - name: PROBE_NAMESPACE
   displayName: Probe Namespace

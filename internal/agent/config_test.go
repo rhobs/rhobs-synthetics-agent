@@ -399,11 +399,11 @@ func TestLoadConfig_APIURLsFromEnvironment(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Reset viper for each test
 			viper.Reset()
-			
+
 			if tt.envValue != "" {
 				_ = os.Setenv("API_URLS", tt.envValue)
 			}
-			
+
 			defer func() {
 				_ = os.Unsetenv("API_URLS")
 			}()

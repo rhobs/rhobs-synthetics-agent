@@ -118,7 +118,7 @@ func LoadConfig() (*Config, error) {
 	viper.SetDefault("polling_interval", "30s")
 	viper.SetDefault("graceful_timeout", "30s")
 	viper.SetDefault("api_urls", []string{})
-	viper.SetDefault("label_selector", "private=false,rhobs-synthetics/status=pending")
+	viper.SetDefault("label_selector", "private=false")
 	viper.SetDefault("jwt_token", "")
 	viper.SetDefault("kube_config", "")
 	viper.SetDefault("namespace", "default")

@@ -10,7 +10,7 @@ api_base_urls:
   - "https://observatorium-api-3.example.com"
 
 api_tenant: "default"
-label_selector: "private=false,rhobs-synthetics/status=pending"
+label_selector: "private=false"
 
 # Kubernetes Configuration
 namespace: "monitoring"

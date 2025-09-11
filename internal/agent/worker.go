@@ -182,55 +182,29 @@ func (w *Worker) processProbes(ctx context.Context, taskWG *sync.WaitGroup, shut
 		return nil
 	}
 
-	// Fetch probe configurations from the API
-	probes, err := w.fetchProbeList(ctx)
-	if err != nil {
-		reconciliationErr = fmt.Errorf("failed to fetch probe list: %w", err)
-		return reconciliationErr
+	if err := w.createProbes(ctx, shutdownChan); err != nil {
+		logger.Infof("error processing probes with status=pending: %v", err)
+	} else {
+		logger.Infof("successfully processed probes with status=pending")
 	}
 
-	if len(probes) == 0 {
-		logger.Info("No pending probes found")
-		return nil
-	}
-
-	logger.Infof("Found %d probes to process", len(probes))
-
-	// Process each probe
-	for _, probe := range probes {
-		select {
-		case <-shutdownChan:
-			logger.Info("shutdown in progress, stopping probe processing")
-			return nil
-		default:
-		}
-
-		if err := w.processProbe(ctx, probe); err != nil {
-			logger.Infof("Failed to process probe %s: %v", probe.ID, err)
-			// Update probe status to failed
-			w.updateProbeStatus(probe.ID, "failed")
-			// Record failed probe resource operation
-			metrics.RecordProbeResourceOperation("create", false)
-		} else {
-			logger.Infof("Successfully processed probe %s", probe.ID)
-			// Update probe status to active
-			w.updateProbeStatus(probe.ID, "active")
-			// Record successful probe resource operation
-			metrics.RecordProbeResourceOperation("create", true)
-		}
+	if err := w.deleteProbe(ctx, shutdownChan); err != nil {
+		logger.Infof("error processing probes with status=terminating: %v", err)
+	} else {
+		logger.Infof("successfully processed probes with status=terminating")
 	}
 
 	return nil
 }
 
 // fetchProbeList retrieves probe configurations from all configured RHOBS Probes APIs
-func (w *Worker) fetchProbeList(ctx context.Context) ([]api.Probe, error) {
+func (w *Worker) fetchProbeList(ctx context.Context, selector string) ([]api.Probe, error) {
 	if len(w.apiClients) == 0 {
 		return []api.Probe{}, nil
 	}
 
-	labelSelector := ""
-	if w.config != nil {
+	labelSelector := selector
+	if selector == "" && w.config != nil {
 		labelSelector = w.config.LabelSelector
 	}
 
@@ -309,31 +283,43 @@ func (w *Worker) updateProbeStatus(probeID, status string) {
 	}
 }
 
-// processProbe creates a Custom Resource for a single probe
-func (w *Worker) processProbe(ctx context.Context, probe api.Probe) error {
-	logger.Infof("Processing probe %s with target URL: %s", probe.ID, probe.StaticURL)
-
-	// Try to create the probe Custom Resource in Kubernetes
-	err := w.probeManager.CreateProbeK8sResource(probe, w.config.Blackbox.Probing)
+// createProbe creates a Custom Resource for a single probe
+func (w *Worker) createProbes(ctx context.Context, shutdownChan chan struct{}) error {
+	// Fetch probe configurations from the API
+	labelSelector, err := w.setStatusSelector(ctx, "pending")
 	if err != nil {
-		// If K8s creation fails, fall back to logging the resource definition
-		logger.Infof("Failed to create Kubernetes resource (falling back to logging): %v", err)
+		return fmt.Errorf("failed to set selector: %w", err)
+	}
+	probes, err := w.fetchProbeList(ctx, labelSelector)
+	if err != nil {
+		return fmt.Errorf("failed to fetch probe list: %w", err)
+	}
 
-		cr, crErr := w.probeManager.CreateProbeResource(probe, w.config.Blackbox.Probing)
-		if crErr != nil {
-			return fmt.Errorf("failed to create probe resource definition: %w", crErr)
+	if len(probes) == 0 {
+		logger.Info("No pending probes found")
+		return nil
+	}
+
+	logger.Infof("Found %d probes to process", len(probes))
+
+	// Process each probe
+	for _, probe := range probes {
+		select {
+		case <-shutdownChan:
+			logger.Info("shutdown in progress, stopping probe processing")
+			return nil
+		default:
 		}
 
-		crJSON, jsonErr := json.MarshalIndent(cr, "", "  ")
-		if jsonErr != nil {
-			logger.Infof("Failed to marshal CR to JSON: %v", jsonErr)
+		if err := w.createProbe(ctx, probe); err != nil {
+			logger.Infof("Failed to process probe %s: %v", probe.ID, err)
+			// Record failed probe resource operation
+			metrics.RecordProbeResourceOperation("create", false)
 		} else {
-			logger.Infof("Would create probe Custom Resource:\n%s", string(crJSON))
+			logger.Infof("Successfully processed probe %s", probe.ID)
+			// Record successful probe resource operation
+			metrics.RecordProbeResourceOperation("create", true)
 		}
-
-		logger.Infof("Probe %s processed (logged only - not running in compatible K8s cluster)", probe.ID)
-	} else {
-		logger.Infof("Successfully created monitoring.coreos.com/v1 Probe resource for probe %s", probe.ID)
 	}
 	return nil
 }
@@ -377,4 +363,86 @@ func (w *Worker) manageProber(ctx context.Context, name string) error {
 	}
 	logger.Debugf("prober: %#v", prober)
 	return nil
+}
+
+// createProbe processes a single probe (extracted for testing)
+func (w *Worker) createProbe(ctx context.Context, probe api.Probe) error {
+	// Try to create the probe Custom Resource in Kubernetes
+	err := w.probeManager.CreateProbeK8sResource(probe, w.config.Blackbox.Probing)
+	logger.Infof("Processing probe %s with target URL: %s", probe.ID, probe.StaticURL)
+	if err != nil {
+		// If K8s creation fails, fall back to logging the resource definition
+		logger.Infof("Failed to create Kubernetes resource (falling back to logging): %v", err)
+
+		cr, crErr := w.probeManager.CreateProbeResource(probe, w.config.Blackbox.Probing)
+		if crErr != nil {
+			w.updateProbeStatus(probe.ID, "failed")
+			return fmt.Errorf("failed to create probe resource definition: %w", crErr)
+		}
+
+		crJSON, jsonErr := json.MarshalIndent(cr, "", "  ")
+		if jsonErr != nil {
+			logger.Infof("Failed to marshal CR to JSON: %v", jsonErr)
+		} else {
+			logger.Infof("Would create probe Custom Resource:\n%s", string(crJSON))
+		}
+
+		logger.Infof("Probe %s processed (logged only - not running in compatible K8s cluster)", probe.ID)
+		w.updateProbeStatus(probe.ID, "active")
+		metrics.RecordProbeResourceOperation("create", true)
+	} else {
+		logger.Infof("Successfully created monitoring.coreos.com/v1 Probe resource for probe %s", probe.ID)
+		w.updateProbeStatus(probe.ID, "active")
+		metrics.RecordProbeResourceOperation("create", true)
+	}
+	return nil
+}
+
+func (w *Worker) deleteProbe(ctx context.Context, shutdownChan chan struct{}) error {
+	labelSelector, err := w.setStatusSelector(ctx, "terminating")
+	if err != nil {
+		return fmt.Errorf("failed to set selector: %w", err)
+	}
+	probes, err := w.fetchProbeList(ctx, labelSelector)
+	if err != nil {
+		return fmt.Errorf("failed to fetch probe list: %w", err)
+	}
+	logger.Infof("Found %d probes waiting to be deleted", len(probes))
+	for _, probe := range probes {
+		logger.Infof("Deleting probe %s with target URL: %s", probe.ID, probe.StaticURL)
+		select {
+		case <-shutdownChan:
+			logger.Info("shutdown in progress, reattempting probe deletion")
+			return nil
+		default:
+		}
+		err := w.probeManager.DeleteProbeK8sResource(probe)
+		if err != nil {
+			return fmt.Errorf("failed to delete CR for probe %s: %w", probe.ID, err)
+		}
+		err = w.apiClients[0].DeleteProbe(probe.ID)
+		if err != nil {
+			return fmt.Errorf("failed to delete probe %s configuration from API database: %w", probe.ID, err)
+		}
+	}
+	return nil
+}
+
+func (w *Worker) setStatusSelector(ctx context.Context, statusSelector string) (string, error) {
+	label_selector := w.config.LabelSelector
+	switch statusSelector {
+	case "terminating":
+		label_selector = fmt.Sprintf("%s,rhobs-synthetics/status=terminating", w.config.LabelSelector)
+	case "pending":
+		label_selector = fmt.Sprintf("%s,rhobs-synthetics/status=pending", w.config.LabelSelector)
+	case "failed":
+		label_selector = fmt.Sprintf("%s,rhobs-synthetics/status=failed", w.config.LabelSelector)
+	case "active":
+		label_selector = fmt.Sprintf("%s,rhobs-synthetics/status=active", w.config.LabelSelector)
+	case "deleted":
+		label_selector = fmt.Sprintf("%s,rhobs-synthetics/status=deleted", w.config.LabelSelector)
+	default:
+	}
+	return label_selector, nil
+
 }
