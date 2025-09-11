@@ -142,14 +142,6 @@ func (w *Worker) Start(ctx context.Context, taskWG *sync.WaitGroup, shutdownChan
 			logger.Info("worker stopping due to shutdown signal")
 			return nil
 		case <-ticker.C:
-			// Check if shutdown is in progress before starting new tasks
-			select {
-			case <-shutdownChan:
-				logger.Info("shutdown in progress, skipping new probe processing")
-				return nil
-			default:
-			}
-
 			if err := w.processProbes(ctx, taskWG, shutdownChan); err != nil {
 				logger.Errorf("work iteration failed: %v\n", err)
 				// Continue running even if one iteration fails
@@ -165,14 +157,6 @@ func (w *Worker) Start(ctx context.Context, taskWG *sync.WaitGroup, shutdownChan
 }
 
 func (w *Worker) processProbes(ctx context.Context, taskWG *sync.WaitGroup, shutdownChan chan struct{}) error {
-	// Check if shutdown is in progress before starting new tasks
-	select {
-	case <-shutdownChan:
-		logger.Info("shutdown in progress, skipping probe processing")
-		return nil
-	default:
-	}
-
 	logger.Info("Starting probe reconciliation cycle")
 	reconciliationStart := time.Now()
 	var reconciliationErr error
@@ -458,14 +442,6 @@ func (w *Worker) setStatusSelector(ctx context.Context, statusSelector string) (
 func (w *Worker) processPrometheus(ctx context.Context, shutdownChan chan struct{}) error {
 	if w.proberManager == nil {
 		return nil
-	}
-
-	// Check if shutdown is in progress
-	select {
-	case <-shutdownChan:
-		logger.Debug("shutdown in progress, skipping prometheus processing")
-		return nil
-	default:
 	}
 
 	logger.Debug("reconciling prometheus instance")
