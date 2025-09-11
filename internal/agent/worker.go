@@ -68,18 +68,25 @@ func NewWorker(cfg *Config) (*Worker, error) {
 	if kubeConfigPath != "" || kubeclient.IsRunningInK8sCluster() {
 		// Create prober manager configuration
 		proberManagerConfig := k8s.BlackBoxProberManagerConfig{
-			Namespace:         namespace,
-			KubeconfigPath:    kubeConfigPath,
-			Deployment:        blackboxDeploymentCfg,
-			RemoteWriteURL:    cfg.Prometheus.RemoteWriteURL,
-			RemoteWriteTenant: cfg.Prometheus.RemoteWriteTenant,
-			PrometheusResources: k8s.PrometheusResourceConfig{
+			Namespace:      namespace,
+			KubeconfigPath: kubeConfigPath,
+			Deployment:     blackboxDeploymentCfg,
+		}
+
+		// Set Prometheus configuration if config is provided
+		if cfg != nil {
+			proberManagerConfig.RemoteWriteURL = cfg.Prometheus.RemoteWriteURL
+			proberManagerConfig.RemoteWriteTenant = cfg.Prometheus.RemoteWriteTenant
+			proberManagerConfig.PrometheusResources = k8s.PrometheusResourceConfig{
 				CPURequests:    cfg.Prometheus.CPURequests,
 				CPULimits:      cfg.Prometheus.CPULimits,
 				MemoryRequests: cfg.Prometheus.MemoryRequests,
 				MemoryLimits:   cfg.Prometheus.MemoryLimits,
-			},
-			ManagedByOperator: cfg.Prometheus.ManagedByOperator,
+			}
+			proberManagerConfig.ManagedByOperator = cfg.Prometheus.ManagedByOperator
+		} else {
+			// Default values when config is nil
+			proberManagerConfig.ManagedByOperator = "observability-operator"
 		}
 		proberManager, err = k8s.NewBlackBoxProberManager(proberManagerConfig)
 		if err != nil {
