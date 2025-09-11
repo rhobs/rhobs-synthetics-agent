@@ -10,7 +10,6 @@ import (
 	kerr "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/dynamic"
 
@@ -61,7 +60,7 @@ const (
 
 type BlackBoxProberManager struct {
 	// kubeClient allows the BlackBoxProberManager to interact with a Kubernetes cluster
-	kubeClient *kubeclient.Client
+	kubeClient dynamic.Interface
 	// namespace denotes the namespace the ProberManager is operating under
 	namespace string
 	// cfg defines the BlackBoxProberManager's configuration. All BlackBoxProbers managed by
@@ -119,13 +118,13 @@ func NewBlackBoxProberManager(config BlackBoxProberManagerConfig) (*BlackBoxProb
 	}
 
 	manager := &BlackBoxProberManager{
-		kubeClient:          client,
 		namespace:           namespace,
 		cfg:                 config.Deployment,
 		remoteWriteURL:      remoteWriteURL,
 		remoteWriteTenant:   config.RemoteWriteTenant,
 		prometheusResources: config.PrometheusResources,
 		managedByOperator:   managedByOperator,
+		kubeClient: client.DynamicClient(),
 	}
 	return manager, nil
 }
@@ -133,28 +132,23 @@ func NewBlackBoxProberManager(config BlackBoxProberManagerConfig) (*BlackBoxProb
 // deploymentClient is a helper function to interact with appsv1.Deployment objects in the namespace specified
 // in the BlackBoxProberManager's config
 func (m *BlackBoxProberManager) deploymentClient() dynamic.ResourceInterface {
-	return m.kubeClient.DynamicClient().Resource(appsv1.SchemeGroupVersion.WithResource("deployments")).Namespace(m.namespace)
+	return m.kubeClient.Resource(appsv1.SchemeGroupVersion.WithResource("deployments")).Namespace(m.namespace)
 }
 
 // serviceClient is a helper function to interact with corev1.Service objects in the namespace specified
 // in the BlackBoxProberManager's config
 func (m *BlackBoxProberManager) serviceClient() dynamic.ResourceInterface {
-	serviceGVR := schema.GroupVersionResource{
-		Group:    "",
-		Version:  "v1",
-		Resource: "services",
-	}
-	return m.kubeClient.DynamicClient().Resource(serviceGVR).Namespace(m.namespace)
+	return m.kubeClient.Resource(corev1.SchemeGroupVersion.WithResource("services")).Namespace(m.namespace)
 }
 
 // prometheusClient is a helper function to interact with monitoring.rhobs/v1 Prometheus objects
 func (m *BlackBoxProberManager) prometheusClient() dynamic.ResourceInterface {
 	prometheusGVR := promv1.SchemeGroupVersion.WithResource(promv1.Resource("prometheuses").Resource)
-	return m.kubeClient.DynamicClient().Resource(prometheusGVR).Namespace(m.namespace)
+	return m.kubeClient.Resource(prometheusGVR).Namespace(m.namespace)
 }
 
 func (m *BlackBoxProberManager) GetProber(ctx context.Context, name string) (p Prober, found bool, err error) {
-	deploymentName := m.proberDeploymentName(name)
+	deploymentName := blackboxProberDeploymentName(name)
 	unstruct, err := m.deploymentClient().Get(ctx, deploymentName, metav1.GetOptions{})
 	if err != nil {
 		if kerr.IsNotFound(err) {
@@ -169,7 +163,7 @@ func (m *BlackBoxProberManager) GetProber(ctx context.Context, name string) (p P
 	}
 
 	p = &BlackBoxProber{
-		deployment: *deployment,
+		deployment: deployment,
 	}
 	return p, true, nil
 }
@@ -187,9 +181,13 @@ func (m *BlackBoxProberManager) CreateProber(ctx context.Context, name string) (
 		return nil, fmt.Errorf("failed to CREATE prober deployment %q: %w", fmt.Sprintf("%s/%s", deployment.Namespace, deployment.Name), err)
 	}
 
-	result, err := convertUnstructuredToDeployment(unstructuredResult)
+	blackboxDeployment, err := convertUnstructuredToDeployment(unstructuredResult)
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert unstructured object to deployment object: %w", err)
+	}
+
+	p := &BlackBoxProber{
+		deployment: blackboxDeployment,
 	}
 
 	// Create service
@@ -199,14 +197,22 @@ func (m *BlackBoxProberManager) CreateProber(ctx context.Context, name string) (
 		return nil, fmt.Errorf("failed to convert service to unstructured object: %w", err)
 	}
 
-	_, err = m.serviceClient().Create(ctx, unstructuredService, metav1.CreateOptions{})
+	unstructuredResult, err = m.serviceClient().Create(ctx, unstructuredService, metav1.CreateOptions{})
 	if err != nil {
-		// If service creation fails, we should still return the deployment result
+		// If service creation fails, we should still return the Prober,
 		// but log the error since the service is not critical for basic functionality
-		return result, fmt.Errorf("prober deployment created but service creation failed %q: %w", fmt.Sprintf("%s/%s", service.Namespace, service.Name), err)
+		return p, fmt.Errorf("prober deployment created but service creation failed %q: %w", fmt.Sprintf("%s/%s", service.Namespace, service.Name), err)
 	}
 
-	return result, nil
+	blackboxService, err := convertUnstructuredToService(unstructuredResult)
+	if err != nil {
+		// If conversion fails, still return the Prober, but log the error since service is not
+		// critical for basic functionality
+		return p, fmt.Errorf("failed to convert unstructured object to service: %w", err)
+	}
+
+	p.service = blackboxService
+	return p, nil
 }
 
 func (m *BlackBoxProberManager) DeleteProber(ctx context.Context, name string) error {
@@ -327,7 +333,7 @@ func (m *BlackBoxProberManager) buildProberDeployment(proberName string) appsv1.
 
 	deployment := appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      m.proberDeploymentName(proberName),
+			Name:      blackboxProberDeploymentName(proberName),
 			Namespace: m.namespace,
 			Labels:    labels,
 		},
@@ -369,7 +375,7 @@ func (m *BlackBoxProberManager) buildProberService(proberName string) corev1.Ser
 
 	service := corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      m.proberServiceName(proberName),
+			Name:      blackboxProberServiceName(proberName),
 			Namespace: m.namespace,
 			Labels:    labels,
 		},
@@ -391,12 +397,12 @@ func (m *BlackBoxProberManager) buildProberService(proberName string) corev1.Ser
 }
 
 // proberDeploymentName generates the standardized name for a BlackBoxProber's deployment
-func (m *BlackBoxProberManager) proberDeploymentName(name string) string {
+func blackboxProberDeploymentName(name string) string {
 	return fmt.Sprintf("%s-%s", BlackBoxProberPrefix, name)
 }
 
 // proberServiceName generates the standardized name for a BlackBoxProber's service
-func (m *BlackBoxProberManager) proberServiceName(name string) string {
+func blackboxProberServiceName(name string) string {
 	return fmt.Sprintf("%s-%s-service", BlackBoxProberPrefix, name)
 }
 
@@ -419,7 +425,8 @@ type Prober interface {
 // BlackBoxProber defines a Prober which measures endpoint availability via BlackBox Exporter
 // deployments
 type BlackBoxProber struct {
-	deployment appsv1.Deployment
+	deployment *appsv1.Deployment
+	service    *corev1.Service
 }
 
 // String prints a uniquely-identifying string for the BlackBoxProber
