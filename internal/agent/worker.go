@@ -478,6 +478,9 @@ func (w *Worker) processPrometheus(ctx context.Context, shutdownChan chan struct
 }
 
 func (w *Worker) managePrometheus(ctx context.Context) error {
+	if w.proberManager == nil {
+		return nil
+	}
 	found, err := w.proberManager.GetPrometheus(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to retrieve prometheus instance: %w", err)

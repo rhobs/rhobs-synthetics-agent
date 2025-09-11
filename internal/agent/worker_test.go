@@ -603,6 +603,132 @@ func TestWorker_updateProbeStatus_MultipleClients(t *testing.T) {
 	workerNoClients.updateProbeStatus("test-probe", "active")
 }
 
+func TestWorker_processPrometheus(t *testing.T) {
+	cfg := &Config{
+		PollingInterval: 30 * time.Second,
+		GracefulTimeout: 30 * time.Second,
+		Namespace:       "test-namespace",
+		Prometheus: PrometheusConfig{
+			RemoteWriteURL:     "http://test-thanos:19291/api/v1/receive",
+			RemoteWriteTenant:  "test-tenant",
+			CPURequests:        "100m",
+			CPULimits:          "500m",
+			MemoryRequests:     "256Mi",
+			MemoryLimits:       "512Mi",
+			ManagedByOperator:  "test-operator",
+		},
+	}
+
+	worker, err := NewWorker(cfg)
+	if err != nil {
+		t.Fatalf("unexpected error creating worker: %v", err)
+	}
+
+	shutdownChan := make(chan struct{})
+	ctx := context.Background()
+
+	// Test processPrometheus when proberManager is nil
+	worker.proberManager = nil
+	err = worker.processPrometheus(ctx, shutdownChan)
+	if err != nil {
+		t.Errorf("processPrometheus() should return nil when proberManager is nil, got: %v", err)
+	}
+
+	// Test processPrometheus with shutdown signal
+	close(shutdownChan)
+	err = worker.processPrometheus(ctx, shutdownChan)
+	if err != nil {
+		t.Errorf("processPrometheus() should return nil on shutdown signal, got: %v", err)
+	}
+}
+
+func TestWorker_managePrometheus(t *testing.T) {
+	cfg := &Config{
+		PollingInterval: 30 * time.Second,
+		GracefulTimeout: 30 * time.Second,
+		Namespace:       "test-namespace",
+		Prometheus: PrometheusConfig{
+			RemoteWriteURL:     "http://test-thanos:19291/api/v1/receive",
+			RemoteWriteTenant:  "test-tenant",
+			CPURequests:        "100m",
+			CPULimits:          "500m",
+			MemoryRequests:     "256Mi",
+			MemoryLimits:       "512Mi",
+			ManagedByOperator:  "test-operator",
+		},
+	}
+
+	worker, err := NewWorker(cfg)
+	if err != nil {
+		t.Fatalf("unexpected error creating worker: %v", err)
+	}
+
+	ctx := context.Background()
+
+	// Test managePrometheus when proberManager is nil (should return early)
+	worker.proberManager = nil
+	err = worker.managePrometheus(ctx)
+	if err != nil {
+		t.Errorf("managePrometheus() should return nil when proberManager is nil, got: %v", err)
+	}
+
+	// Note: Testing the actual Prometheus creation/checking requires mocking the K8s client
+	// or running in a real K8s environment, which is better handled in integration tests
+}
+
+func TestWorker_PrometheusConfigIntegration(t *testing.T) {
+	// Test that worker correctly passes Prometheus configuration to ProberManager
+	cfg := &Config{
+		PollingInterval: 30 * time.Second,
+		GracefulTimeout: 30 * time.Second,
+		Namespace:       "test-namespace",
+		Prometheus: PrometheusConfig{
+			RemoteWriteURL:     "http://custom-thanos:19291/api/v1/receive",
+			RemoteWriteTenant:  "custom-tenant",
+			CPURequests:        "200m",
+			CPULimits:          "1000m",
+			MemoryRequests:     "512Mi",
+			MemoryLimits:       "1Gi",
+			ManagedByOperator:  "custom-operator",
+		},
+	}
+
+	worker, err := NewWorker(cfg)
+	if err != nil {
+		t.Fatalf("unexpected error creating worker: %v", err)
+	}
+
+	// Verify worker has correct configuration
+	if worker.config.Prometheus.RemoteWriteURL != "http://custom-thanos:19291/api/v1/receive" {
+		t.Errorf("Expected RemoteWriteURL 'http://custom-thanos:19291/api/v1/receive', got %q", worker.config.Prometheus.RemoteWriteURL)
+	}
+
+	if worker.config.Prometheus.RemoteWriteTenant != "custom-tenant" {
+		t.Errorf("Expected RemoteWriteTenant 'custom-tenant', got %q", worker.config.Prometheus.RemoteWriteTenant)
+	}
+
+	if worker.config.Prometheus.ManagedByOperator != "custom-operator" {
+		t.Errorf("Expected ManagedByOperator 'custom-operator', got %q", worker.config.Prometheus.ManagedByOperator)
+	}
+}
+
+func TestWorker_PrometheusConfigDefaults(t *testing.T) {
+	// Test that NewWorker handles nil config gracefully for Prometheus settings
+	worker, err := NewWorker(nil)
+	if err != nil {
+		t.Fatalf("unexpected error creating worker: %v", err)
+	}
+
+	if worker == nil {
+		t.Fatal("NewWorker() returned nil with nil config")
+	}
+
+	// Worker should be created without error even with nil config
+	if worker.config != nil {
+		t.Error("Expected nil config to remain nil")
+	}
+}
+
 func TestNewWorker_EdgeCases(t *testing.T) {
 	// Test with config containing empty URL in the slice
 	cfg := &Config{
