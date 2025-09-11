@@ -12,6 +12,7 @@ import (
 	"github.com/rhobs/rhobs-synthetics-agent/internal/logger"
 	"github.com/rhobs/rhobs-synthetics-api/pkg/kubeclient"
 	appsv1 "k8s.io/api/apps/v1"
+	kerr "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -213,6 +214,9 @@ func (pm *ProbeManager) DeleteProbeK8sResource(probe api.Probe) error {
 	// Construct the probe name using the same pattern as in CreateProbeK8sResource
 	probeName := fmt.Sprintf("probe-%s", probe.ID)
 
+	logger.Debugf("Attempting to delete Probe resource: name=%s, namespace=%s, apiGroup=%s",
+		probeName, pm.namespace, pm.probeAPIGroup)
+
 	// Delete the resource from Kubernetes
 	err := pm.kubeClient.DynamicClient().Resource(probeGVR).Namespace(pm.namespace).Delete(
 		ctx,
@@ -221,6 +225,11 @@ func (pm *ProbeManager) DeleteProbeK8sResource(probe api.Probe) error {
 	)
 
 	if err != nil {
+		// Check if the error is "not found" - this is considered successful deletion (idempotent)
+		if kerr.IsNotFound(err) {
+			logger.Infof("Probe resource %s not found (already deleted), treating as successful", probeName)
+			return nil
+		}
 		return fmt.Errorf("failed to delete Probe resource %s from Kubernetes: %w", probeName, err)
 	}
 
