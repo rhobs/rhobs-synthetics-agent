@@ -25,6 +25,9 @@ type ProberManager interface {
 	CreateProber(ctx context.Context, name string) (p Prober, err error)
 	// DeleteProber removes a Prober with the given name
 	DeleteProber(ctx context.Context, name string) (err error)
+}
+
+type PrometheusManager interface {
 	// PrometheusExists checks if the Prometheus instance exists for this manager
 	PrometheusExists(ctx context.Context) (found bool, err error)
 	// CreatePrometheus creates a Prometheus instance for synthetic monitoring

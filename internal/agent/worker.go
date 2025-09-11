@@ -21,6 +21,7 @@ type Worker struct {
 	apiClients        []*api.Client
 	probeManager      *k8s.ProbeManager
 	proberManager     k8s.ProberManager
+	prometheusManager k8s.PrometheusManager
 	readinessCallback func(bool)
 }
 
@@ -94,11 +95,18 @@ func NewWorker(cfg *Config) (*Worker, error) {
 		}
 	}
 
+	// Type assert to ensure BlackBoxProberManager implements both interfaces
+	var prometheusManager k8s.PrometheusManager
+	if pm, ok := proberManager.(k8s.PrometheusManager); ok {
+		prometheusManager = pm
+	}
+
 	w := &Worker{
 		config:            cfg,
 		apiClients:        apiClients,
 		probeManager:      probeManager,
 		proberManager:     proberManager,
+		prometheusManager: prometheusManager,
 		readinessCallback: func(bool) {}, // no-op by default
 	}
 	return w, nil
@@ -440,7 +448,7 @@ func (w *Worker) setStatusSelector(ctx context.Context, statusSelector string) (
 }
 
 func (w *Worker) processPrometheus(ctx context.Context, shutdownChan chan struct{}) error {
-	if w.proberManager == nil {
+	if w.prometheusManager == nil {
 		return nil
 	}
 
@@ -454,16 +462,16 @@ func (w *Worker) processPrometheus(ctx context.Context, shutdownChan chan struct
 }
 
 func (w *Worker) managePrometheus(ctx context.Context) error {
-	if w.proberManager == nil {
+	if w.prometheusManager == nil {
 		return nil
 	}
-	found, err := w.proberManager.PrometheusExists(ctx)
+	found, err := w.prometheusManager.PrometheusExists(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to retrieve prometheus instance: %w", err)
 	}
 	if !found {
 		logger.Info("prometheus instance not found; creating new prometheus instance")
-		err = w.proberManager.CreatePrometheus(ctx)
+		err = w.prometheusManager.CreatePrometheus(ctx)
 		if err != nil {
 			return fmt.Errorf("failed to create prometheus instance: %w", err)
 		}
