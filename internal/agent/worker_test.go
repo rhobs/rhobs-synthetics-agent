@@ -609,13 +609,13 @@ func TestWorker_processPrometheus(t *testing.T) {
 		GracefulTimeout: 30 * time.Second,
 		Namespace:       "test-namespace",
 		Prometheus: PrometheusConfig{
-			RemoteWriteURL:     "http://test-thanos:19291/api/v1/receive",
-			RemoteWriteTenant:  "test-tenant",
-			CPURequests:        "100m",
-			CPULimits:          "500m",
-			MemoryRequests:     "256Mi",
-			MemoryLimits:       "512Mi",
-			ManagedByOperator:  "test-operator",
+			RemoteWriteURL:    "http://test-thanos:19291/api/v1/receive",
+			RemoteWriteTenant: "test-tenant",
+			CPURequests:       "100m",
+			CPULimits:         "500m",
+			MemoryRequests:    "256Mi",
+			MemoryLimits:      "512Mi",
+			ManagedByOperator: "test-operator",
 		},
 	}
 
@@ -627,18 +627,18 @@ func TestWorker_processPrometheus(t *testing.T) {
 	shutdownChan := make(chan struct{})
 	ctx := context.Background()
 
-	// Test processPrometheus when proberManager is nil
-	worker.proberManager = nil
+	// Test processPrometheus when prometheusManager is nil
+	worker.prometheusManager = nil
 	err = worker.processPrometheus(ctx, shutdownChan)
 	if err != nil {
-		t.Errorf("processPrometheus() should return nil when proberManager is nil, got: %v", err)
+		t.Errorf("processPrometheus() should return nil when prometheusManager is nil, got: %v", err)
 	}
 
-	// Test processPrometheus with shutdown signal
+	// Test processPrometheus with shutdown signal (prometheus manager still nil from previous test)
 	close(shutdownChan)
 	err = worker.processPrometheus(ctx, shutdownChan)
 	if err != nil {
-		t.Errorf("processPrometheus() should return nil on shutdown signal, got: %v", err)
+		t.Errorf("processPrometheus() should return nil when prometheusManager is nil, got: %v", err)
 	}
 }
 
@@ -648,13 +648,13 @@ func TestWorker_managePrometheus(t *testing.T) {
 		GracefulTimeout: 30 * time.Second,
 		Namespace:       "test-namespace",
 		Prometheus: PrometheusConfig{
-			RemoteWriteURL:     "http://test-thanos:19291/api/v1/receive",
-			RemoteWriteTenant:  "test-tenant",
-			CPURequests:        "100m",
-			CPULimits:          "500m",
-			MemoryRequests:     "256Mi",
-			MemoryLimits:       "512Mi",
-			ManagedByOperator:  "test-operator",
+			RemoteWriteURL:    "http://test-thanos:19291/api/v1/receive",
+			RemoteWriteTenant: "test-tenant",
+			CPURequests:       "100m",
+			CPULimits:         "500m",
+			MemoryRequests:    "256Mi",
+			MemoryLimits:      "512Mi",
+			ManagedByOperator: "test-operator",
 		},
 	}
 
@@ -665,11 +665,11 @@ func TestWorker_managePrometheus(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Test managePrometheus when proberManager is nil (should return early)
-	worker.proberManager = nil
+	// Test managePrometheus when prometheusManager is nil (should return early)
+	worker.prometheusManager = nil
 	err = worker.managePrometheus(ctx)
 	if err != nil {
-		t.Errorf("managePrometheus() should return nil when proberManager is nil, got: %v", err)
+		t.Errorf("managePrometheus() should return nil when prometheusManager is nil, got: %v", err)
 	}
 
 	// Note: Testing the actual Prometheus creation/checking requires mocking the K8s client
@@ -683,13 +683,13 @@ func TestWorker_PrometheusConfigIntegration(t *testing.T) {
 		GracefulTimeout: 30 * time.Second,
 		Namespace:       "test-namespace",
 		Prometheus: PrometheusConfig{
-			RemoteWriteURL:     "http://custom-thanos:19291/api/v1/receive",
-			RemoteWriteTenant:  "custom-tenant",
-			CPURequests:        "200m",
-			CPULimits:          "1000m",
-			MemoryRequests:     "512Mi",
-			MemoryLimits:       "1Gi",
-			ManagedByOperator:  "custom-operator",
+			RemoteWriteURL:    "http://custom-thanos:19291/api/v1/receive",
+			RemoteWriteTenant: "custom-tenant",
+			CPURequests:       "200m",
+			CPULimits:         "1000m",
+			MemoryRequests:    "512Mi",
+			MemoryLimits:      "1Gi",
+			ManagedByOperator: "custom-operator",
 		},
 	}
 
