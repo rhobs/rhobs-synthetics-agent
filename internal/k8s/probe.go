@@ -13,6 +13,7 @@ import (
 	"github.com/rhobs/rhobs-synthetics-api/pkg/kubeclient"
 	appsv1 "k8s.io/api/apps/v1"
 	kerr "k8s.io/apimachinery/pkg/api/errors"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -330,4 +331,16 @@ func convertUnstructuredToDeployment(unstruct *unstructured.Unstructured) (*apps
 	}
 	err := runtime.DefaultUnstructuredConverter.FromUnstructured(unstruct.Object, deployment)
 	return deployment, err
+}
+
+func convertUnstructuredToService(unstruct *unstructured.Unstructured) (*corev1.Service, error) {
+	service := &corev1.Service{}
+	if unstruct == nil {
+		return service, fmt.Errorf("provided unstructured object is nil")
+	}
+	if unstruct.Object == nil {
+		return service, fmt.Errorf("provided unstructured object has .Object=nil")
+	}
+	err := runtime.DefaultUnstructuredConverter.FromUnstructured(unstruct.Object, service)
+	return service, err
 }
