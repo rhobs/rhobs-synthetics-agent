@@ -130,11 +130,21 @@ func (c *Client) UpdateProbeStatus(probeID, status string) error {
 	return nil
 }
 
-// DeleteProbe deletes a probe from the API
+// DeleteProbe marks a probe for deletion by setting status to "deleted"
 func (c *Client) DeleteProbe(probeID string) error {
 	reqURL := fmt.Sprintf("%s/%s", c.BaseURL, probeID)
 
-	req, err := http.NewRequest("DELETE", reqURL, nil)
+	// Create request body with status "deleted"
+	requestBody := map[string]string{
+		"status": "deleted",
+	}
+
+	jsonBody, err := json.Marshal(requestBody)
+	if err != nil {
+		return fmt.Errorf("failed to marshal request body: %w", err)
+	}
+
+	req, err := http.NewRequest("PATCH", reqURL, bytes.NewBuffer(jsonBody))
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
@@ -154,7 +164,7 @@ func (c *Client) DeleteProbe(probeID string) error {
 		_ = resp.Body.Close()
 	}()
 
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusNotFound {
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNotFound {
 		body, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
 	}
