@@ -146,6 +146,8 @@ objects:
               - start
               - --config
               - /etc/config/config.yaml
+              - --prometheus-remote-write-tenant
+              - ${PROMETHEUS_REMOTE_WRITE_TENANT}
             ports:
               - name: http
                 containerPort: 8080
@@ -305,4 +307,9 @@ parameters:
   displayName: Blackbox Prober URL
   description: URL of the blackbox exporter prober
   value: synthetics-blackbox-prober-default-service:9115
+  required: true
+- name: PROMETHEUS_REMOTE_WRITE_TENANT
+  displayName: Prometheus Remote Write Tenant
+  description: Thanos tenant identifier for remote write requests
+  value: EFD08939-FE1D-41A1-A28A-BE9A9BC68003
   required: true
