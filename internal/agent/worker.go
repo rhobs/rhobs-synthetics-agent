@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"sync"
 	"time"
 
@@ -31,6 +32,14 @@ func NewWorker(cfg *Config) (*Worker, error) {
 	namespace := defaultProbeNamespace
 	kubeConfigPath := ""
 	blackboxDeploymentCfg := k8s.BlackboxDeploymentConfig{}
+
+	// Use NAMESPACE env var (pod's namespace) if available, otherwise use config
+	if envNamespace := os.Getenv("NAMESPACE"); envNamespace != "" {
+		namespace = envNamespace
+	} else if cfg != nil && cfg.Namespace != "" {
+		namespace = cfg.Namespace
+	}
+
 	if cfg != nil {
 		// Create API clients for each configured URL
 		apiURLs := cfg.GetAPIURLs()
@@ -41,9 +50,6 @@ func NewWorker(cfg *Config) (*Worker, error) {
 			}
 		}
 
-		if cfg.Namespace != "" {
-			namespace = cfg.Namespace
-		}
 		if cfg.KubeConfig != "" {
 			kubeConfigPath = cfg.KubeConfig
 		}
