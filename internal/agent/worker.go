@@ -99,6 +99,9 @@ func NewWorker(cfg *Config) (*Worker, error) {
 	var prometheusManager k8s.PrometheusManager
 	if pm, ok := proberManager.(k8s.PrometheusManager); ok {
 		prometheusManager = pm
+		logger.Info("Prometheus manager initialized successfully")
+	} else {
+		logger.Warn("Prometheus manager not initialized - proberManager does not implement PrometheusManager interface")
 	}
 
 	w := &Worker{
@@ -449,10 +452,11 @@ func (w *Worker) setStatusSelector(ctx context.Context, statusSelector string) (
 
 func (w *Worker) processPrometheus(ctx context.Context, shutdownChan chan struct{}) error {
 	if w.prometheusManager == nil {
+		logger.Debug("skipping prometheus reconciliation - prometheus manager is nil")
 		return nil
 	}
 
-	logger.Debug("reconciling prometheus instance")
+	logger.Info("reconciling prometheus instance")
 	err := w.managePrometheus(ctx)
 	if err != nil {
 		logger.Errorf("failed to reconcile prometheus instance: %v", err)
@@ -477,7 +481,7 @@ func (w *Worker) managePrometheus(ctx context.Context) error {
 		}
 		logger.Info("successfully created prometheus instance for synthetic monitoring")
 	} else {
-		logger.Debug("prometheus instance already exists")
+		logger.Info("prometheus instance already exists")
 	}
 	return nil
 }
