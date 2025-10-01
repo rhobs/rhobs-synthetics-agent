@@ -195,7 +195,9 @@ func (pm *ProbeManager) DeleteProbeK8sResource(probe api.Probe) error {
 	}
 
 	if pm.probeAPIGroup == "" {
-		return fmt.Errorf("no compatible Probe CRDs found in cluster")
+		// CRD doesn't exist - CR can't exist either, treat as already deleted
+		logger.Infof("Probe CRD not found in cluster, treating probe %s as already deleted", probe.ID)
+		return nil
 	}
 
 	if pm.kubeClient == nil {
@@ -319,6 +321,17 @@ func convertToUnstructured(object interface{}) (*unstructured.Unstructured, erro
 		Object: obj,
 	}
 	return unstruct, nil
+}
+
+// convertFromUnstructured converts an unstructured object to a typed object
+func convertFromUnstructured(unstruct *unstructured.Unstructured, target interface{}) error {
+	if unstruct == nil {
+		return fmt.Errorf("provided unstructured object is nil")
+	}
+	if unstruct.Object == nil {
+		return fmt.Errorf("provided unstructured object has nil Object field")
+	}
+	return runtime.DefaultUnstructuredConverter.FromUnstructured(unstruct.Object, target)
 }
 
 func convertUnstructuredToDeployment(unstruct *unstructured.Unstructured) (*appsv1.Deployment, error) {

@@ -14,6 +14,7 @@ import (
 	"k8s.io/client-go/dynamic"
 
 	promv1 "github.com/rhobs/obo-prometheus-operator/pkg/apis/monitoring/v1"
+	"github.com/rhobs/rhobs-synthetics-agent/internal/logger"
 	"github.com/rhobs/rhobs-synthetics-api/pkg/kubeclient"
 )
 
@@ -33,6 +34,8 @@ type PrometheusManager interface {
 	CreatePrometheus(ctx context.Context) (err error)
 	// DeletePrometheus removes the Prometheus instance
 	DeletePrometheus(ctx context.Context) (err error)
+	// PrometheusNeedsRecreation checks if the Prometheus instance needs to be deleted and recreated
+	PrometheusNeedsRecreation(ctx context.Context) (needsRecreation bool, err error)
 }
 
 const (
@@ -266,6 +269,50 @@ func (m *BlackBoxProberManager) DeletePrometheus(ctx context.Context) error {
 			fmt.Sprintf("%s/%s", m.namespace, PrometheusResourceName), err)
 	}
 	return nil
+}
+
+// PrometheusNeedsRecreation checks if the existing Prometheus instance needs to be recreated
+// due to configuration changes (e.g., different tenant)
+func (m *BlackBoxProberManager) PrometheusNeedsRecreation(ctx context.Context) (bool, error) {
+	// Add timeout for the operation
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	unstructured, err := m.prometheusClient().Get(ctx, PrometheusResourceName, metav1.GetOptions{})
+	if err != nil {
+		if kerr.IsNotFound(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("failed to GET prometheus %q: %w",
+			fmt.Sprintf("%s/%s", m.namespace, PrometheusResourceName), err)
+	}
+
+	// Convert unstructured to Prometheus
+	var currentPrometheus promv1.Prometheus
+	err = convertFromUnstructured(unstructured, &currentPrometheus)
+	if err != nil {
+		return false, fmt.Errorf("failed to convert unstructured to prometheus: %w", err)
+	}
+
+	// Check if tenant matches
+	if len(currentPrometheus.Spec.RemoteWrite) > 0 {
+		currentTenant := currentPrometheus.Spec.RemoteWrite[0].Headers["THANOS-TENANT"]
+		if currentTenant != m.remoteWriteTenant {
+			logger.Infof("Prometheus tenant mismatch: current=%q, expected=%q", currentTenant, m.remoteWriteTenant)
+			return true, nil
+		}
+	}
+
+	// Check if remote write URL matches
+	if len(currentPrometheus.Spec.RemoteWrite) > 0 {
+		if currentPrometheus.Spec.RemoteWrite[0].URL != m.remoteWriteURL {
+			logger.Infof("Prometheus remote write URL mismatch: current=%q, expected=%q",
+				currentPrometheus.Spec.RemoteWrite[0].URL, m.remoteWriteURL)
+			return true, nil
+		}
+	}
+
+	return false, nil
 }
 
 // buildPrometheusResource creates a Prometheus resource for synthetic monitoring
