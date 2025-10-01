@@ -426,14 +426,22 @@ func (w *Worker) deleteProbe(ctx context.Context, shutdownChan chan struct{}) er
 			return nil
 		default:
 		}
+
+		// Try to delete CR, but don't fail if it's already gone
 		err := w.probeManager.DeleteProbeK8sResource(probe)
 		if err != nil {
-			return fmt.Errorf("failed to delete CR for probe %s: %w", probe.ID, err)
+			logger.Warnf("Could not delete Kubernetes CR for probe %s: %v", probe.ID, err)
+			// Continue anyway - API is source of truth
 		}
+
+		// Always try to clean up from API
 		err = w.apiClients[0].DeleteProbe(probe.ID)
 		if err != nil {
-			return fmt.Errorf("failed to delete probe %s configuration from API database: %w", probe.ID, err)
+			logger.Errorf("Failed to delete probe %s from API: %v", probe.ID, err)
+			// Continue to next probe instead of failing entire batch
+			continue
 		}
+		logger.Infof("Successfully deleted probe %s", probe.ID)
 	}
 	return nil
 }
@@ -487,7 +495,27 @@ func (w *Worker) managePrometheus(ctx context.Context) error {
 		}
 		logger.Info("successfully created prometheus instance for synthetic monitoring")
 	} else {
-		logger.Info("prometheus instance already exists")
+		// Check if existing Prometheus needs to be recreated due to config changes
+		needsRecreation, err := w.prometheusManager.PrometheusNeedsRecreation(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to check if prometheus needs recreation: %w", err)
+		}
+		if needsRecreation {
+			logger.Info("prometheus instance configuration changed; deleting and recreating")
+			err = w.prometheusManager.DeletePrometheus(ctx)
+			if err != nil {
+				return fmt.Errorf("failed to delete prometheus instance: %w", err)
+			}
+			logger.Info("deleted prometheus instance")
+
+			err = w.prometheusManager.CreatePrometheus(ctx)
+			if err != nil {
+				return fmt.Errorf("failed to recreate prometheus instance: %w", err)
+			}
+			logger.Info("successfully recreated prometheus instance with updated configuration")
+		} else {
+			logger.Info("prometheus instance already exists with correct configuration")
+		}
 	}
 	return nil
 }
