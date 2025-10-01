@@ -429,7 +429,9 @@ func (w *Worker) deleteProbe(ctx context.Context, shutdownChan chan struct{}) er
 		}
 		err := w.probeManager.DeleteProbeK8sResource(probe)
 		if err != nil {
-			// Check if the error is due to missing CRDs - in this case, we should still proceed with API deletion
+      // If the CRD doesn't exist or CR is already gone, log warning and continue with API cleanup
+      logger.Warnf("failed to delete CR for probe %s (may already be deleted): %v", probe.ID, err)
+      // Don't return error - continue to API deletion
 			if strings.Contains(err.Error(), "no compatible Probe CRDs found in cluster") {
 				logger.Infof("CRDs not found for probe %s, proceeding with API deletion only: %v", probe.ID, err)
 			} else {
