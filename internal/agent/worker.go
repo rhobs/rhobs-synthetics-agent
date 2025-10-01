@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -209,7 +210,7 @@ func (w *Worker) processProbes(ctx context.Context, taskWG *sync.WaitGroup, shut
 }
 
 // fetchProbeList retrieves probe configurations from all configured RHOBS Probes APIs
-func (w *Worker) fetchProbeList(ctx context.Context, selector string) ([]api.Probe, error) {
+func (w *Worker) fetchProbeList(selector string) ([]api.Probe, error) {
 	if len(w.apiClients) == 0 {
 		return []api.Probe{}, nil
 	}
@@ -297,11 +298,11 @@ func (w *Worker) updateProbeStatus(probeID, status string) {
 // createProbe creates a Custom Resource for a single probe
 func (w *Worker) createProbes(ctx context.Context, shutdownChan chan struct{}) error {
 	// Fetch probe configurations from the API
-	labelSelector, err := w.setStatusSelector(ctx, "pending")
+	labelSelector, err := w.setStatusSelector("pending")
 	if err != nil {
 		return fmt.Errorf("failed to set selector: %w", err)
 	}
-	probes, err := w.fetchProbeList(ctx, labelSelector)
+	probes, err := w.fetchProbeList(labelSelector)
 	if err != nil {
 		return fmt.Errorf("failed to fetch probe list: %w", err)
 	}
@@ -409,11 +410,11 @@ func (w *Worker) createProbe(ctx context.Context, probe api.Probe) error {
 }
 
 func (w *Worker) deleteProbe(ctx context.Context, shutdownChan chan struct{}) error {
-	labelSelector, err := w.setStatusSelector(ctx, "terminating")
+	labelSelector, err := w.setStatusSelector("terminating")
 	if err != nil {
 		return fmt.Errorf("failed to set selector: %w", err)
 	}
-	probes, err := w.fetchProbeList(ctx, labelSelector)
+	probes, err := w.fetchProbeList(labelSelector)
 	if err != nil {
 		return fmt.Errorf("failed to fetch probe list: %w", err)
 	}
@@ -428,7 +429,12 @@ func (w *Worker) deleteProbe(ctx context.Context, shutdownChan chan struct{}) er
 		}
 		err := w.probeManager.DeleteProbeK8sResource(probe)
 		if err != nil {
-			return fmt.Errorf("failed to delete CR for probe %s: %w", probe.ID, err)
+			// Check if the error is due to missing CRDs - in this case, we should still proceed with API deletion
+			if strings.Contains(err.Error(), "no compatible Probe CRDs found in cluster") {
+				logger.Infof("CRDs not found for probe %s, proceeding with API deletion only: %v", probe.ID, err)
+			} else {
+				return fmt.Errorf("failed to delete CR for probe %s: %w", probe.ID, err)
+			}
 		}
 		err = w.apiClients[0].DeleteProbe(probe.ID)
 		if err != nil {
@@ -438,7 +444,7 @@ func (w *Worker) deleteProbe(ctx context.Context, shutdownChan chan struct{}) er
 	return nil
 }
 
-func (w *Worker) setStatusSelector(ctx context.Context, statusSelector string) (string, error) {
+func (w *Worker) setStatusSelector(statusSelector string) (string, error) {
 	labelSelector := w.config.LabelSelector
 	switch statusSelector {
 	case "terminating":
