@@ -10,9 +10,9 @@ require (
 	github.com/rhobs/rhobs-synthetics-api v0.0.0-20250830010301-def5473cdb84
 	github.com/spf13/cobra v1.9.1
 	github.com/spf13/viper v1.20.1
-	k8s.io/api v0.34.0
-	k8s.io/apimachinery v0.34.0
-	k8s.io/client-go v0.34.0
+	k8s.io/api v0.34.1
+	k8s.io/apimachinery v0.34.1
+	k8s.io/client-go v0.34.1
 )
 
 require (
