@@ -3,7 +3,7 @@ module github.com/rhobs/rhobs-synthetics-agent
 go 1.24.1
 
 require (
-	github.com/coreos/prometheus-operator v0.41.1
+	github.com/coreos/prometheus-operator v0.86.1
 	github.com/oklog/run v1.2.0
 	github.com/prometheus/client_golang v1.23.2
 	github.com/rhobs/obo-prometheus-operator/pkg/apis/monitoring v0.83.0-rhobs1
