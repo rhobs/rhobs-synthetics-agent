@@ -21,25 +21,46 @@ import (
 
 // RealAPIManager manages the lifecycle of the actual RHOBS Synthetics API server
 type RealAPIManager struct {
-	cmd         *exec.Cmd
-	apiURL      string
-	port        int
-	dataDir     string
-	apiPath     string
-	stopChan    chan struct{}
-	started     bool
-	ctx         context.Context
-	cancel      context.CancelFunc
+	cmd      *exec.Cmd
+	apiURL   string
+	port     int
+	dataDir  string
+	apiPath  string
+	stopChan chan struct{}
+	started  bool
+	ctx      context.Context
+	cancel   context.CancelFunc
 }
 
 // NewRealAPIManager creates a new manager for the real API server
 func NewRealAPIManager() *RealAPIManager {
 	ctx, cancel := context.WithCancel(context.Background())
 
-	// Get API path from environment variable, fallback to default
+	// Get API path with priority:
+	// 1. RHOBS_SYNTHETICS_API_PATH environment variable (for local development)
+	// 2. Go module cache (automatic, like RMO) - will be copied to temp dir
+	// 3. Relative path fallback
 	apiPath := os.Getenv("RHOBS_SYNTHETICS_API_PATH")
+	var needsCopy bool
+
 	if apiPath == "" {
-		apiPath = "../rhobs-synthetics-api"
+		// Try to find the API in the Go module cache
+		if modulePath, err := getModulePath("github.com/rhobs/rhobs-synthetics-api"); err == nil && modulePath != "" {
+			apiPath = modulePath
+			needsCopy = true // Module cache is read-only, need to copy
+		} else {
+			// Fall back to relative path
+			apiPath = "../rhobs-synthetics-api"
+		}
+	}
+
+	// If using module cache, copy to a writable temp directory
+	if needsCopy {
+		tempDir := filepath.Join("/tmp", "rhobs-synthetics-api-build")
+		if err := copyDir(apiPath, tempDir); err == nil {
+			apiPath = tempDir
+		}
+		// If copy fails, will try to use module cache directly (may fail at build)
 	}
 
 	return &RealAPIManager{
@@ -50,6 +71,41 @@ func NewRealAPIManager() *RealAPIManager {
 		ctx:      ctx,
 		cancel:   cancel,
 	}
+}
+
+// getModulePath returns the filesystem path of a Go module from the module cache
+func getModulePath(moduleName string) (string, error) {
+	cmd := exec.Command("go", "list", "-m", "-f", "{{.Dir}}", moduleName)
+	output, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("failed to find module %s: %w", moduleName, err)
+	}
+	return strings.TrimSpace(string(output)), nil
+}
+
+// copyDir recursively copies a directory from src to dst
+func copyDir(src, dst string) error {
+	// Remove existing temp directory if it exists
+	os.RemoveAll(dst)
+
+	// Create destination directory
+	if err := os.MkdirAll(dst, 0755); err != nil {
+		return fmt.Errorf("failed to create destination directory: %w", err)
+	}
+
+	// Use cp command for faster copying (works on Unix-like systems)
+	cmd := exec.Command("cp", "-R", src+"/.", dst)
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to copy directory: %w", err)
+	}
+
+	// Make all files writable (module cache files are read-only)
+	chmodCmd := exec.Command("chmod", "-R", "+w", dst)
+	if err := chmodCmd.Run(); err != nil {
+		return fmt.Errorf("failed to make files writable: %w", err)
+	}
+
+	return nil
 }
 
 // Start builds and starts the real RHOBS Synthetics API server
@@ -128,6 +184,12 @@ func (m *RealAPIManager) GetURL() string {
 
 // buildAPI builds the RHOBS Synthetics API binary
 func (m *RealAPIManager) buildAPI() error {
+	// Run make clean first to remove any old binaries
+	cleanCmd := exec.CommandContext(m.ctx, "make", "clean")
+	cleanCmd.Dir = m.apiPath
+	_ = cleanCmd.Run() // Ignore errors from clean
+
+	// Now build
 	cmd := exec.CommandContext(m.ctx, "make", "build")
 	cmd.Dir = m.apiPath
 	cmd.Stdout = os.Stdout
@@ -249,16 +311,16 @@ func (m *RealAPIManager) SeedTestData() error {
 		{
 			staticURL: "https://httpbin.org/status/200",
 			labels: map[string]string{
-				"env":     "test",
-				"private": "false",
+				"env":                     "test",
+				"private":                 "false",
 				"rhobs-synthetics/status": "pending",
 			},
 		},
 		{
 			staticURL: "https://httpbin.org/get",
 			labels: map[string]string{
-				"env":     "test",
-				"private": "false",
+				"env":                     "test",
+				"private":                 "false",
 				"rhobs-synthetics/status": "pending",
 			},
 		},

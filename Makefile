@@ -16,7 +16,7 @@ MAIN_PACKAGE=./cmd/agent/main.go
 CONTAINER_ENGINE ?= podman
 TESTOPTS ?= -cover
 
-.PHONY: all build clean run help lint lint-fix lint-ci go-mod-tidy go-mod-download test test-race test-integration test-e2e test-e2e-real test-e2e-all coverage docker-build docker-push example-config
+.PHONY: all build clean run help lint lint-fix lint-ci go-mod-tidy go-mod-download test test-race test-integration test-e2e test-e2e-real test-e2e-all test-full-e2e coverage docker-build docker-push example-config
 
 all: build
 
@@ -79,6 +79,11 @@ test-e2e-all: go-mod-download
 		exit 1; \
 	fi
 	go test -v ./test/e2e -timeout 60s
+
+test-full-e2e: go-mod-download
+	@echo "Running full-stack integration test with ACTUAL RMO code (RMO → API → Agent)..."
+	@echo "Note: API will be automatically found in Go module cache (or set RHOBS_SYNTHETICS_API_PATH for local dev)"
+	go test -v ./test/e2e -run TestFullStackIntegration -timeout 5m
 
 .PHONY: coverage
 coverage:
@@ -165,6 +170,7 @@ help:
 	@echo "  test-e2e         - Run end-to-end tests with mock API"
 	@echo "  test-e2e-real    - Run end-to-end tests with real API"
 	@echo "  test-e2e-all     - Run all end-to-end tests"
+	@echo "  test-full-e2e    - Run full-stack integration test with ACTUAL RMO code (RMO → API → Agent)"
 	@echo "  coverage         - Generate detailed coverage report"
 	@echo ""
 	@echo "Code Quality:"
