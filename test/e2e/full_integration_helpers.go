@@ -287,7 +287,7 @@ func startRMOAPIProxy(targetAPIURL string) *httptest.Server {
 		}
 
 		w.WriteHeader(resp.StatusCode)
-		io.Copy(w, resp.Body)
+		_, _ = io.Copy(w, resp.Body)
 	}))
 }
 
@@ -297,7 +297,7 @@ func startMockProbeTargetServer() *httptest.Server {
 		if r.URL.Path == "/livez" || r.URL.Path == "/healthz" || r.URL.Path == "/readyz" {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(`{"status":"ok"}`))
+			_, _ = w.Write([]byte(`{"status":"ok"}`))
 		} else {
 			w.WriteHeader(http.StatusNotFound)
 		}
@@ -311,12 +311,12 @@ func startMockDynatraceServer() *httptest.Server {
 		case r.Method == "GET" && r.URL.Path == "/v1/synthetic/monitors/":
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(`{"monitors":[]}`))
+			_, _ = w.Write([]byte(`{"monitors":[]}`))
 
 		case r.Method == "POST" && r.URL.Path == "/v1/synthetic/monitors":
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(`{"entityId":"SYNTHETIC_TEST-1234567890","name":"mock-monitor"}`))
+			_, _ = w.Write([]byte(`{"entityId":"SYNTHETIC_TEST-1234567890","name":"mock-monitor"}`))
 
 		case r.Method == "DELETE":
 			w.WriteHeader(http.StatusNoContent)
@@ -324,7 +324,7 @@ func startMockDynatraceServer() *httptest.Server {
 		case r.Method == "GET" && r.URL.Path == "/v1/synthetic/locations":
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(`{"locations":[
+			_, _ = w.Write([]byte(`{"locations":[
 				{"name":"N. Virginia","entityId":"SYNTHETIC_LOCATION-PUBLIC-123","type":"PUBLIC","status":"ENABLED"},
 				{"name":"backplanei03xyz","entityId":"SYNTHETIC_LOCATION-PRIVATE-456","type":"PRIVATE","status":"ENABLED"},
 				{"name":"Oregon","entityId":"SYNTHETIC_LOCATION-PUBLIC-789","type":"PUBLIC","status":"ENABLED"}
@@ -332,7 +332,7 @@ func startMockDynatraceServer() *httptest.Server {
 
 		default:
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(`{"success":true}`))
+			_, _ = w.Write([]byte(`{"success":true}`))
 		}
 	}))
 }

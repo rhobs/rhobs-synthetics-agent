@@ -59,7 +59,7 @@ func TestFullStackIntegration(t *testing.T) {
 	t.Logf("Mock probe target server started at %s", mockProbeTarget.URL)
 
 	apiManager := NewRealAPIManager()
-	defer apiManager.Stop()
+	defer func() { _ = apiManager.Stop() }()
 
 	err := apiManager.Start()
 	if err != nil {
