@@ -341,16 +341,6 @@ func TestFullStackIntegration(t *testing.T) {
 		} else {
 			t.Log("✅ Probe has correct cluster-id label")
 		}
-
-		if sourceLabel := probe.Labels["source"]; sourceLabel != "" {
-			if sourceLabel == "route-monitor-operator" {
-				t.Log("✅ Probe has correct source label")
-			} else {
-				t.Logf("⚠️  Probe has unexpected source label: %s", sourceLabel)
-			}
-		} else {
-			t.Log("ℹ️  Probe does not have source label (this is okay - RMO doesn't always set it)")
-		}
 	})
 
 	t.Run("RMO_Deletes_Probe", func(t *testing.T) {
