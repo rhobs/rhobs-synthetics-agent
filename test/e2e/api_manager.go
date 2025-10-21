@@ -86,7 +86,7 @@ func getModulePath(moduleName string) (string, error) {
 // copyDir recursively copies a directory from src to dst
 func copyDir(src, dst string) error {
 	// Remove existing temp directory if it exists
-	os.RemoveAll(dst)
+	_ = os.RemoveAll(dst)
 
 	// Create destination directory
 	if err := os.MkdirAll(dst, 0755); err != nil {

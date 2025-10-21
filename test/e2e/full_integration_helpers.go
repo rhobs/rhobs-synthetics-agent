@@ -88,7 +88,7 @@ func createProbeViaAPI(baseURL, clusterID, probeURL string, isPrivate bool) (str
 	if err != nil {
 		return "", fmt.Errorf("failed to send request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusCreated {
 		body, _ := io.ReadAll(resp.Body)
@@ -110,7 +110,7 @@ func getProbeByID(baseURL, probeID string) (*api.Probe, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to send request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusNotFound {
 		return nil, fmt.Errorf("probe not found")
@@ -141,7 +141,7 @@ func listProbes(baseURL, labelSelector string) ([]api.Probe, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to send request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
@@ -168,7 +168,7 @@ func deleteProbeViaAPI(baseURL, probeID string) error {
 	if err != nil {
 		return fmt.Errorf("failed to send request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
@@ -257,7 +257,7 @@ func startRMOAPIProxy(targetAPIURL string) *httptest.Server {
 		var bodyBytes []byte
 		if r.Body != nil {
 			bodyBytes, _ = io.ReadAll(r.Body)
-			r.Body.Close()
+			_ = r.Body.Close()
 		}
 
 		proxyReq, err := http.NewRequest(r.Method, proxyURL, bytes.NewBuffer(bodyBytes))
@@ -278,7 +278,7 @@ func startRMOAPIProxy(targetAPIURL string) *httptest.Server {
 			http.Error(w, fmt.Sprintf("Failed to execute proxy request: %v", err), http.StatusBadGateway)
 			return
 		}
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 
 		for key, values := range resp.Header {
 			for _, value := range values {
