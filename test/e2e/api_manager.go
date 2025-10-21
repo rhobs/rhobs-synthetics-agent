@@ -202,9 +202,10 @@ func (m *RealAPIManager) buildAPI() error {
 	return nil
 }
 
-// findAvailablePort finds an available port starting from 8080
+// findAvailablePort finds an available port starting from 8081
+// Port 8080 is reserved for the agent's metrics server
 func (m *RealAPIManager) findAvailablePort() error {
-	for port := 8080; port < 8100; port++ {
+	for port := 8081; port < 8100; port++ {
 		if m.isPortAvailable(port) {
 			m.port = port
 			return nil

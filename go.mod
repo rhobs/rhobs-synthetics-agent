@@ -102,3 +102,4 @@ require (
 )
 
 // replace github.com/rhobs/rhobs-synthetics-api => ../rhobs-synthetics-api
+replace github.com/openshift/route-monitor-operator => /Users/erosente/code/route-monitor-operator
