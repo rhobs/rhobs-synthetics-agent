@@ -5,6 +5,10 @@ go 1.24.1
 require (
 	github.com/coreos/prometheus-operator v0.41.1
 	github.com/oklog/run v1.2.0
+	github.com/openshift/api v0.0.0-20240524162738-d899f8877d22
+	github.com/openshift/aws-vpce-operator v0.0.0-20241211114942-1daecf2e4364
+	github.com/openshift/hypershift/api v0.0.0-20241204143212-857ccab4fd7c
+	github.com/openshift/route-monitor-operator v0.0.0-20251018083044-cd96d813378a
 	github.com/prometheus/client_golang v1.23.0
 	github.com/rhobs/obo-prometheus-operator/pkg/apis/monitoring v0.83.0-rhobs1
 	github.com/rhobs/rhobs-synthetics-api v0.0.0-20250830010301-def5473cdb84
@@ -13,6 +17,7 @@ require (
 	k8s.io/api v0.34.0
 	k8s.io/apimachinery v0.34.0
 	k8s.io/client-go v0.34.0
+	sigs.k8s.io/controller-runtime v0.21.0
 )
 
 require (
@@ -45,7 +50,6 @@ require (
 	github.com/google/gnostic-models v0.7.0 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
-	github.com/hashicorp/go-version v1.6.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
@@ -54,23 +58,16 @@ require (
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.3-0.20250322232337-35a7c28c31ee // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
-	github.com/onsi/ginkgo/v2 v2.22.0 // indirect
-	github.com/onsi/gomega v1.36.1 // indirect
-	github.com/openshift/api v0.0.0-20240524162738-d899f8877d22 // indirect
-	github.com/openshift/aws-vpce-operator v0.0.0-20241211114942-1daecf2e4364 // indirect
-	github.com/openshift/hypershift/api v0.0.0-20241204143212-857ccab4fd7c // indirect
-	github.com/openshift/route-monitor-operator v0.0.0-20251018083044-cd96d813378a // indirect
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
-	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.63.0 // indirect
 	github.com/prometheus/client_model v0.6.2 // indirect
 	github.com/prometheus/common v0.65.0 // indirect
 	github.com/prometheus/procfs v0.16.1 // indirect
-	github.com/sagikazarmark/locafero v0.7.0 // indirect
-	github.com/sourcegraph/conc v0.3.0 // indirect
-	github.com/spf13/afero v1.12.0 // indirect
-	github.com/spf13/cast v1.7.1 // indirect
+	github.com/sagikazarmark/locafero v0.10.0 // indirect
+	github.com/sourcegraph/conc v0.3.1-0.20240121214520-5f936abd7ae8 // indirect
+	github.com/spf13/afero v1.14.0 // indirect
+	github.com/spf13/cast v1.9.2 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
@@ -94,12 +91,9 @@ require (
 	k8s.io/klog/v2 v2.130.1 // indirect
 	k8s.io/kube-openapi v0.0.0-20250710124328-f3f2b991d03b // indirect
 	k8s.io/utils v0.0.0-20250820121507-0af2bda4dd1d // indirect
-	sigs.k8s.io/controller-runtime v0.21.0 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
 	sigs.k8s.io/structured-merge-diff/v6 v6.3.0 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
 
-// replace github.com/rhobs/rhobs-synthetics-api => ../rhobs-synthetics-api
-replace github.com/openshift/route-monitor-operator => /Users/erosente/code/route-monitor-operator
