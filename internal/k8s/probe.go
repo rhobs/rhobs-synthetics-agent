@@ -7,13 +7,13 @@ import (
 	"net/url"
 	"time"
 
-	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
+	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/rhobs/rhobs-synthetics-agent/internal/api"
 	"github.com/rhobs/rhobs-synthetics-agent/internal/logger"
 	"github.com/rhobs/rhobs-synthetics-api/pkg/kubeclient"
 	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
 	kerr "k8s.io/apimachinery/pkg/api/errors"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -288,7 +288,7 @@ func (pm *ProbeManager) CreateProbeResource(probe api.Probe, config BlackboxProb
 		},
 		Spec: monitoringv1.ProbeSpec{
 			Module:   config.Module,
-			Interval: monitoringv1.Duration(config.Interval),
+			Interval: config.Interval,
 			ProberSpec: monitoringv1.ProberSpec{
 				URL: config.ProberURL,
 			},
