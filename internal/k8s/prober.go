@@ -13,7 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/dynamic"
 
-	promv1 "github.com/rhobs/obo-prometheus-operator/pkg/apis/monitoring/v1"
+	promv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/rhobs/rhobs-synthetics-agent/internal/logger"
 	"github.com/rhobs/rhobs-synthetics-api/pkg/kubeclient"
 )
@@ -127,7 +127,7 @@ func NewBlackBoxProberManager(config BlackBoxProberManagerConfig) (*BlackBoxProb
 		remoteWriteTenant:   config.RemoteWriteTenant,
 		prometheusResources: config.PrometheusResources,
 		managedByOperator:   managedByOperator,
-		kubeClient: client.DynamicClient(),
+		kubeClient:          client.DynamicClient(),
 	}
 	return manager, nil
 }

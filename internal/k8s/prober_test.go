@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"testing"
 
-	promv1 "github.com/rhobs/obo-prometheus-operator/pkg/apis/monitoring/v1"
+	promv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	kerr "k8s.io/apimachinery/pkg/api/errors"
@@ -36,7 +36,7 @@ func TestBlackBoxProberManager_GetProber(t *testing.T) {
 		found  bool
 	}
 
-	tests := []struct{
+	tests := []struct {
 		name    string
 		prober  string
 		manager func() BlackBoxProberManager
@@ -53,7 +53,7 @@ func TestBlackBoxProberManager_GetProber(t *testing.T) {
 			},
 		},
 		{
-			name: "returns no error if prober exists",
+			name:   "returns no error if prober exists",
 			prober: "test",
 			manager: func() BlackBoxProberManager {
 				objs := []runtime.Object{emptyProberDeployment("test", defaultNamespace)}
@@ -65,7 +65,7 @@ func TestBlackBoxProberManager_GetProber(t *testing.T) {
 			},
 		},
 		{
-			name: "correct prober is returned out of many",
+			name:   "correct prober is returned out of many",
 			prober: "test1",
 			manager: func() BlackBoxProberManager {
 				objs := []runtime.Object{
@@ -127,15 +127,15 @@ func TestBlackBoxProberManager_CreateProber(t *testing.T) {
 		err bool
 	}
 
-	tests := []struct{
-		name      string
-		cfg       BlackboxDeploymentConfig
-		validate  func(BlackBoxProber, clienttesting.ObjectTracker) (bool, string)
-		want      result
+	tests := []struct {
+		name     string
+		cfg      BlackboxDeploymentConfig
+		validate func(BlackBoxProber, clienttesting.ObjectTracker) (bool, string)
+		want     result
 	}{
 		{
 			name: "Returns a in fully populated BlackBoxProber",
-			cfg: BlackboxDeploymentConfig{},
+			cfg:  BlackboxDeploymentConfig{},
 			validate: func(p BlackBoxProber, _ clienttesting.ObjectTracker) (bool, string) {
 				if p.deployment == nil {
 					return false, "unexpected nil assignment to resulting BlackBoxProber.deployment"
@@ -192,7 +192,7 @@ func TestBlackBoxProberManager_CreateProber(t *testing.T) {
 		},
 		{
 			name: "Deployment is actually created by manager",
-			cfg: BlackboxDeploymentConfig{},
+			cfg:  BlackboxDeploymentConfig{},
 			validate: func(_ BlackBoxProber, t clienttesting.ObjectTracker) (bool, string) {
 				_, err := t.Get(appsv1.SchemeGroupVersion.WithResource("deployments"), proberNamesapce, blackboxProberDeploymentName(proberName))
 				if err != nil {
@@ -285,7 +285,7 @@ func TestBlackBoxProberManager_CreateProber(t *testing.T) {
 		},
 		{
 			name: "Service is created by manager",
-			cfg: BlackboxDeploymentConfig{},
+			cfg:  BlackboxDeploymentConfig{},
 			validate: func(_ BlackBoxProber, t clienttesting.ObjectTracker) (bool, string) {
 				_, err := t.Get(corev1.SchemeGroupVersion.WithResource("services"), proberNamesapce, blackboxProberServiceName(proberName))
 				if err != nil {
@@ -296,7 +296,7 @@ func TestBlackBoxProberManager_CreateProber(t *testing.T) {
 		},
 		{
 			name: "Service selects prober deployment",
-			cfg: BlackboxDeploymentConfig{},
+			cfg:  BlackboxDeploymentConfig{},
 			validate: func(_ BlackBoxProber, t clienttesting.ObjectTracker) (bool, string) {
 				obj, err := t.Get(corev1.SchemeGroupVersion.WithResource("services"), proberNamesapce, blackboxProberServiceName(proberName))
 				if err != nil {
@@ -349,7 +349,7 @@ func TestBlackBoxProberManager_CreateProber(t *testing.T) {
 }
 
 func TestBlackBoxProberManager_buildProberDeployment(t *testing.T) {
-	tests := []struct{
+	tests := []struct {
 		name      string
 		namespace string
 		prober    string
@@ -357,9 +357,9 @@ func TestBlackBoxProberManager_buildProberDeployment(t *testing.T) {
 		validate  func(appsv1.Deployment) (bool, string)
 	}{
 		{
-			name: "deployment is named properly",
+			name:   "deployment is named properly",
 			prober: "test-prober",
-			cfg: BlackboxDeploymentConfig{},
+			cfg:    BlackboxDeploymentConfig{},
 			validate: func(d appsv1.Deployment) (bool, string) {
 				if d.Name != blackboxProberDeploymentName("test-prober") {
 					return false, "deployment name does not match expected value"
@@ -368,9 +368,9 @@ func TestBlackBoxProberManager_buildProberDeployment(t *testing.T) {
 			},
 		},
 		{
-			name: "deployment is in manager's namespace",
+			name:      "deployment is in manager's namespace",
 			namespace: "test-namespace",
-			cfg: BlackboxDeploymentConfig{},
+			cfg:       BlackboxDeploymentConfig{},
 			validate: func(d appsv1.Deployment) (bool, string) {
 				if d.Namespace != "test-namespace" {
 					return false, "deployment namespace does not match expected value"
@@ -379,9 +379,9 @@ func TestBlackBoxProberManager_buildProberDeployment(t *testing.T) {
 			},
 		},
 		{
-			name: "deployment labels are all correct by default",
+			name:   "deployment labels are all correct by default",
 			prober: "test-prober",
-			cfg: BlackboxDeploymentConfig{},
+			cfg:    BlackboxDeploymentConfig{},
 			validate: func(d appsv1.Deployment) (bool, string) {
 				// test .metadata.label
 				val, found := d.Labels[BlackBoxProberManagerProberLabelKey]
@@ -414,7 +414,7 @@ func TestBlackBoxProberManager_buildProberDeployment(t *testing.T) {
 			},
 		},
 		{
-			name: "custom labels cannot override label selector",
+			name:   "custom labels cannot override label selector",
 			prober: "test-prober",
 			cfg: BlackboxDeploymentConfig{
 				Labels: map[string]string{BlackBoxProberManagerProberLabelKey: "invalidLabelValue"},
@@ -451,7 +451,7 @@ func TestBlackBoxProberManager_buildProberDeployment(t *testing.T) {
 			},
 		},
 		{
-			name: "non-conflicting custom labels get applied to deployment",
+			name:   "non-conflicting custom labels get applied to deployment",
 			prober: "test-prober",
 			cfg: BlackboxDeploymentConfig{
 				Labels: map[string]string{"validCustomLabelKey": "validCustomLabelValue"},
@@ -481,8 +481,8 @@ func TestBlackBoxProberManager_buildProberDeployment(t *testing.T) {
 		{
 			name: "container is configurable",
 			cfg: BlackboxDeploymentConfig{
-				Cmd: []string{"fakecommand"},
-				Args: []string{"fakearg1", "fakearg2"},
+				Cmd:   []string{"fakecommand"},
+				Args:  []string{"fakearg1", "fakearg2"},
 				Image: "quay.io/faketest/image:faketag",
 			},
 			validate: func(d appsv1.Deployment) (bool, string) {
@@ -859,11 +859,11 @@ func TestBlackBoxProberManager_PrometheusExists(t *testing.T) {
 		err   bool
 	}
 
-	tests := []struct{
-		name string
+	tests := []struct {
+		name      string
 		namespace string
-		objs []runtime.Object
-		want result
+		objs      []runtime.Object
+		want      result
 	}{
 		{
 			name: "Returns true when matching object present",
@@ -916,12 +916,12 @@ func TestBlackBoxProberManager_PrometheusExists(t *testing.T) {
 
 func TestBlackBoxProberManager_CreatePrometheus(t *testing.T) {
 	var (
-		ctx = context.Background()
+		ctx              = context.Background()
 		defaultNamespace = "default"
 	)
-	tests := []struct{
-		name string
-		objs []runtime.Object
+	tests := []struct {
+		name     string
+		objs     []runtime.Object
 		validate func(clienttesting.ObjectTracker, error) (bool, string)
 	}{
 		{
@@ -976,7 +976,7 @@ func TestBlackBoxProberManager_DeletePrometheus(t *testing.T) {
 		defaultNamespace = "default"
 	)
 
-	tests := []struct{
+	tests := []struct {
 		name     string
 		objs     []runtime.Object
 		validate func(clienttesting.ObjectTracker, error) (bool, string)
@@ -1048,15 +1048,14 @@ func TestBlackBoxProberManager_PrometheusResourceDefaults(t *testing.T) {
 
 // Test utilities
 
-
 func newTestBlackBoxProberManagerWithTracker(namespace string, cfg BlackboxDeploymentConfig, objs []runtime.Object) (BlackBoxProberManager, clienttesting.ObjectTracker) {
 	s := scheme.Scheme
 	kubeClient := fake.NewSimpleDynamicClient(s, objs...)
 
 	manager := BlackBoxProberManager{
 		kubeClient: kubeClient,
-		namespace: namespace,
-		cfg: cfg,
+		namespace:  namespace,
+		cfg:        cfg,
 	}
 
 	return manager, kubeClient.Tracker()
@@ -1073,8 +1072,8 @@ func newTestBlackBoxProberManager(namespace string, cfg BlackboxDeploymentConfig
 
 	manager := BlackBoxProberManager{
 		kubeClient: kubeClient,
-		namespace: namespace,
-		cfg: cfg,
+		namespace:  namespace,
+		cfg:        cfg,
 	}
 
 	return manager
