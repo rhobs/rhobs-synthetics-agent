@@ -7,7 +7,7 @@ require (
 	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.86.1
 	github.com/prometheus/client_golang v1.23.2
 	github.com/rhobs/obo-prometheus-operator/pkg/apis/monitoring v0.83.0-rhobs1
-	github.com/rhobs/rhobs-synthetics-api v0.0.0-20251017150653-d12cf3590d70
+	github.com/rhobs/rhobs-synthetics-api v0.0.0-20251028055941-2644bc2f5086
 	github.com/spf13/cobra v1.10.1
 	github.com/spf13/viper v1.21.0
 	k8s.io/api v0.34.1
@@ -61,7 +61,7 @@ require (
 	github.com/spf13/pflag v1.0.10 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
-	go.yaml.in/yaml/v3 v3.0.4 // indirect
+	go.yaml.in/yaml/v2 v2.4.3 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/net v0.46.0 // indirect
 	golang.org/x/oauth2 v0.32.0 // indirect
