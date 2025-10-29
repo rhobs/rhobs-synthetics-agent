@@ -109,8 +109,8 @@ github.com/prometheus/procfs v0.19.1 h1:QVtROpTkphuXuNlnCv3m1ut3JytkXHtQ3xvck/Ym
 github.com/prometheus/procfs v0.19.1/go.mod h1:M0aotyiemPhBCM0z5w87kL22CxfcH05ZpYlu+b4J7mw=
 github.com/rhobs/obo-prometheus-operator/pkg/apis/monitoring v0.83.0-rhobs1 h1:tnuw3oTPuZN/srWcVXU6+BqtXJTxOQebsI+MYMKdE08=
 github.com/rhobs/obo-prometheus-operator/pkg/apis/monitoring v0.83.0-rhobs1/go.mod h1:cVp/Ggq8Y2v3WUDhwbDAF4b07C8P75lozrsJg6eIYxw=
-github.com/rhobs/rhobs-synthetics-api v0.0.0-20251028055941-2644bc2f5086 h1:dgqQeDwc9C6wuZHGPvwMK+E2vrbKfvEBimx3BsBdHVc=
-github.com/rhobs/rhobs-synthetics-api v0.0.0-20251028055941-2644bc2f5086/go.mod h1:wEn+jhCmCcgZedpMMuWz5adDzDUE6ac1NZmil46mkJA=
+github.com/rhobs/rhobs-synthetics-api v0.0.0-20251028210015-b3513835e0ae h1:jhhrx5mIy/JvCA+0V8YX8bpm1r838yZqA0pcTu6WEfI=
+github.com/rhobs/rhobs-synthetics-api v0.0.0-20251028210015-b3513835e0ae/go.mod h1:eFXLe4HbKcuI3UqTGeW6GQAIF/n/QCVv22wSM+HodZc=
 github.com/rogpeppe/go-internal v1.13.1 h1:KvO1DLK/DRN07sQ1LQKScxyZJuNnedQ5/wKSR38lUII=
 github.com/rogpeppe/go-internal v1.13.1/go.mod h1:uMEvuHeurkdAXX61udpOXGD/AzZDWNMNyH2VO9fmH0o=
 github.com/russross/blackfriday/v2 v2.1.0/go.mod h1:+Rmxgy9KzJVeS9/2gXHxylqXiyQDYRxCVz55jmeOWTM=
