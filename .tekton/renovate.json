@@ -11,7 +11,9 @@
   ],
   "tekton": {
     "includePaths": [
-      ".tekton/**"
+      ".tekton/**",
+      "go.mod",
+      "go.sum"
     ],
     "enabled": true,
     "packageRules": [
