@@ -6,7 +6,7 @@ require (
 	github.com/oklog/run v1.2.0
 	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.86.1
 	github.com/prometheus/client_golang v1.23.2
-	github.com/rhobs/obo-prometheus-operator/pkg/apis/monitoring v0.83.0-rhobs1
+	github.com/rhobs/obo-prometheus-operator/pkg/apis/monitoring v0.87.0
 	github.com/rhobs/rhobs-synthetics-api v0.0.0-20251028210015-b3513835e0ae
 	github.com/spf13/cobra v1.10.1
 	github.com/spf13/viper v1.21.0
