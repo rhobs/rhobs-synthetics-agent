@@ -10,6 +10,7 @@ import (
 	kerr "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/dynamic"
 
@@ -64,6 +65,8 @@ const (
 type BlackBoxProberManager struct {
 	// kubeClient allows the BlackBoxProberManager to interact with a Kubernetes cluster
 	kubeClient dynamic.Interface
+	// fullClient provides access to all Kubernetes client capabilities including Discovery
+	fullClient *kubeclient.Client
 	// namespace denotes the namespace the ProberManager is operating under
 	namespace string
 	// cfg defines the BlackBoxProberManager's configuration. All BlackBoxProbers managed by
@@ -77,6 +80,8 @@ type BlackBoxProberManager struct {
 	prometheusResources PrometheusResourceConfig
 	// managedByOperator defines the value for app.kubernetes.io/managed-by label on Prometheus resources
 	managedByOperator string
+	// prometheusAPIGroup stores the detected API group for Prometheus resources ("monitoring.rhobs" or "monitoring.coreos.com")
+	prometheusAPIGroup string
 }
 
 // PrometheusResourceConfig holds the resource configuration for Prometheus pods
@@ -127,9 +132,58 @@ func NewBlackBoxProberManager(config BlackBoxProberManagerConfig) (*BlackBoxProb
 		remoteWriteTenant:   config.RemoteWriteTenant,
 		prometheusResources: config.PrometheusResources,
 		managedByOperator:   managedByOperator,
-		kubeClient: client.DynamicClient(),
+		kubeClient:          client.DynamicClient(),
+		fullClient:          client,
 	}
+
+	// Detect which Prometheus API group is available
+	manager.checkPrometheusCRDs()
+
 	return manager, nil
+}
+
+// checkPrometheusCRDs checks if Prometheus CRDs exist in the cluster and sets the API group
+// Prefers monitoring.rhobs over monitoring.coreos.com
+func (m *BlackBoxProberManager) checkPrometheusCRDs() {
+	if m.fullClient == nil {
+		logger.Errorf("Cannot detect Prometheus CRDs: fullClient is nil")
+		return
+	}
+
+	// Check if the CRDs exist
+	crdClient := m.fullClient.Clientset().Discovery()
+	_, apiLists, err := crdClient.ServerGroupsAndResources()
+	if err != nil {
+		logger.Errorf("Failed to get server resources: %v", err)
+		return
+	}
+
+	// Prefer monitoring.rhobs, fallback to monitoring.coreos.com
+	for _, apiList := range apiLists {
+		if apiList.GroupVersion == "monitoring.rhobs/v1" {
+			for _, resource := range apiList.APIResources {
+				if resource.Kind == "Prometheus" {
+					m.prometheusAPIGroup = "monitoring.rhobs"
+					logger.Infof("Using monitoring.rhobs/v1 for Prometheus resources")
+					return
+				}
+			}
+		}
+	}
+
+	for _, apiList := range apiLists {
+		if apiList.GroupVersion == "monitoring.coreos.com/v1" {
+			for _, resource := range apiList.APIResources {
+				if resource.Kind == "Prometheus" {
+					m.prometheusAPIGroup = "monitoring.coreos.com"
+					logger.Infof("Using monitoring.coreos.com/v1 for Prometheus resources")
+					return
+				}
+			}
+		}
+	}
+
+	logger.Errorf("No compatible Prometheus CRDs found in cluster")
 }
 
 // deploymentClient is a helper function to interact with appsv1.Deployment objects in the namespace specified
@@ -144,9 +198,19 @@ func (m *BlackBoxProberManager) serviceClient() dynamic.ResourceInterface {
 	return m.kubeClient.Resource(corev1.SchemeGroupVersion.WithResource("services")).Namespace(m.namespace)
 }
 
-// prometheusClient is a helper function to interact with monitoring.rhobs/v1 Prometheus objects
+// prometheusClient is a helper function to interact with Prometheus objects
+// Uses the detected API group (monitoring.rhobs or monitoring.coreos.com)
 func (m *BlackBoxProberManager) prometheusClient() dynamic.ResourceInterface {
-	prometheusGVR := promv1.SchemeGroupVersion.WithResource(promv1.Resource("prometheuses").Resource)
+	apiGroup := m.prometheusAPIGroup
+	if apiGroup == "" {
+		// Default to monitoring.rhobs if detection hasn't run or failed
+		apiGroup = "monitoring.rhobs"
+	}
+	prometheusGVR := schema.GroupVersionResource{
+		Group:    apiGroup,
+		Version:  "v1",
+		Resource: "prometheuses",
+	}
 	return m.kubeClient.Resource(prometheusGVR).Namespace(m.namespace)
 }
 
@@ -322,9 +386,16 @@ func (m *BlackBoxProberManager) buildPrometheusResource() *promv1.Prometheus {
 		"app.kubernetes.io/managed-by": m.managedByOperator,
 	}
 
+	// Use detected API group, fallback to monitoring.rhobs (preferred)
+	apiGroup := m.prometheusAPIGroup
+	if apiGroup == "" {
+		apiGroup = "monitoring.rhobs"
+	}
+	apiVersion := fmt.Sprintf("%s/v1", apiGroup)
+
 	return &promv1.Prometheus{
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: PrometheusAPIVersion,
+			APIVersion: apiVersion,
 			Kind:       PrometheusKind,
 		},
 		ObjectMeta: metav1.ObjectMeta{
