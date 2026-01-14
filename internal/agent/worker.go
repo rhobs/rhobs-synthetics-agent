@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/rhobs/rhobs-synthetics-agent/internal/api"
+	"github.com/rhobs/rhobs-synthetics-agent/internal/auth"
 	"github.com/rhobs/rhobs-synthetics-agent/internal/k8s"
 	"github.com/rhobs/rhobs-synthetics-agent/internal/logger"
 	"github.com/rhobs/rhobs-synthetics-agent/internal/metrics"
@@ -43,9 +44,27 @@ func NewWorker(cfg *Config) (*Worker, error) {
 	if cfg != nil {
 		// Create API clients for each configured URL
 		apiURLs := cfg.GetAPIURLs()
+
+		// Create OIDC token provider if credentials are configured
+		var tokenProvider *auth.TokenProvider
+		if cfg.OIDCClientID != "" && cfg.OIDCClientSecret != "" && cfg.OIDCIssuerURL != "" {
+			oidcConfig := &auth.OIDCConfig{
+				ClientID:     cfg.OIDCClientID,
+				ClientSecret: cfg.OIDCClientSecret,
+				IssuerURL:    cfg.OIDCIssuerURL,
+			}
+			tokenProvider = auth.NewTokenProvider(oidcConfig)
+			logger.Infof("OIDC authentication configured for API clients")
+		}
+
 		for _, apiURL := range apiURLs {
 			if apiURL != "" {
-				client := api.NewClient(apiURL, cfg.JWTToken)
+				var client *api.Client
+				if tokenProvider != nil {
+					client = api.NewClientWithOIDC(apiURL, tokenProvider)
+				} else {
+					client = api.NewClient(apiURL, cfg.JWTToken)
+				}
 				apiClients = append(apiClients, client)
 			}
 		}

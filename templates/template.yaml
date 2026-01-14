@@ -157,6 +157,12 @@ objects:
                 valueFrom:
                   fieldRef:
                     fieldPath: metadata.namespace
+              - name: OIDC_CLIENT_ID
+                value: ${OIDC_CLIENT_ID}
+              - name: OIDC_CLIENT_SECRET
+                value: ${OIDC_CLIENT_SECRET}
+              - name: OIDC_ISSUER_URL
+                value: ${OIDC_ISSUER_URL}
             resources:
               limits:
                 cpu: ${CPU_LIMIT}
@@ -313,3 +319,18 @@ parameters:
   description: Thanos tenant identifier for remote write requests
   value: EFD08939-FE1D-41A1-A28A-BE9A9BC68003
   required: true
+- name: OIDC_CLIENT_ID
+  displayName: OIDC Client ID
+  description: OIDC client ID for API authentication (optional, only needed for cross-cluster deployments)
+  value: ""
+  required: false
+- name: OIDC_CLIENT_SECRET
+  displayName: OIDC Client Secret
+  description: OIDC client secret for API authentication (optional, only needed for cross-cluster deployments)
+  value: ""
+  required: false
+- name: OIDC_ISSUER_URL
+  displayName: OIDC Issuer URL
+  description: OIDC issuer URL for token endpoint (optional, only needed for cross-cluster deployments)
+  value: ""
+  required: false
