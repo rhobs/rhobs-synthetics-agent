@@ -67,6 +67,11 @@ func main() {
 	// API Config flags
 	startCmd.Flags().StringSlice("api-urls", []string{}, "Comma-separated list of complete API URLs (e.g., https://api.example.com/api/metrics/v1/tenant/probes)")
 
+	// OIDC Config flags for API authentication
+	startCmd.Flags().String("oidc-client-id", "", "OIDC client ID for API authentication")
+	startCmd.Flags().String("oidc-client-secret", "", "OIDC client secret for API authentication")
+	startCmd.Flags().String("oidc-issuer-url", "", "OIDC issuer URL (token endpoint will be derived by appending /token)")
+
 	// Prometheus Config flags
 	startCmd.Flags().String("prometheus-remote-write-url", "http://thanos-receive-router-rhobs.rhobs-int.svc.cluster.local:19291/api/v1/receive", "Thanos remote write endpoint URL for Prometheus configuration")
 	startCmd.Flags().String("prometheus-remote-write-tenant", "hcp", "Thanos tenant identifier for remote write requests")
@@ -84,6 +89,9 @@ func main() {
 	_ = viper.BindPFlag("kube_config", startCmd.Flags().Lookup("kubeconfig"))
 	_ = viper.BindPFlag("namespace", startCmd.Flags().Lookup("namespace"))
 	_ = viper.BindPFlag("api_urls", startCmd.Flags().Lookup("api-urls"))
+	_ = viper.BindPFlag("oidc_client_id", startCmd.Flags().Lookup("oidc-client-id"))
+	_ = viper.BindPFlag("oidc_client_secret", startCmd.Flags().Lookup("oidc-client-secret"))
+	_ = viper.BindPFlag("oidc_issuer_url", startCmd.Flags().Lookup("oidc-issuer-url"))
 	_ = viper.BindPFlag("prometheus.remote_write_url", startCmd.Flags().Lookup("prometheus-remote-write-url"))
 	_ = viper.BindPFlag("prometheus.remote_write_tenant", startCmd.Flags().Lookup("prometheus-remote-write-tenant"))
 	_ = viper.BindPFlag("prometheus.cpu_requests", startCmd.Flags().Lookup("prometheus-cpu-requests"))

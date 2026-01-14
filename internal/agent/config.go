@@ -21,6 +21,11 @@ type Config struct {
 	LabelSelector string   `mapstructure:"label_selector"`
 	JWTToken      string   `mapstructure:"jwt_token"`
 
+	// OIDC Configuration for API authentication
+	OIDCClientID     string `mapstructure:"oidc_client_id"`
+	OIDCClientSecret string `mapstructure:"oidc_client_secret"`
+	OIDCIssuerURL    string `mapstructure:"oidc_issuer_url"`
+
 	// Kubernetes Configuration
 	KubeConfig string `mapstructure:"kube_config"`
 	Namespace  string `mapstructure:"namespace"`
@@ -108,6 +113,9 @@ func LoadConfig() (*Config, error) {
 	viper.SetDefault("api_urls", []string{})
 	viper.SetDefault("label_selector", "private=false")
 	viper.SetDefault("jwt_token", "")
+	viper.SetDefault("oidc_client_id", "")
+	viper.SetDefault("oidc_client_secret", "")
+	viper.SetDefault("oidc_issuer_url", "")
 	viper.SetDefault("kube_config", "")
 	viper.SetDefault("namespace", "default")
 

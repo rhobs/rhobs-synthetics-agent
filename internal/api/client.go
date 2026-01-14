@@ -2,12 +2,15 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"time"
+
+	"github.com/rhobs/rhobs-synthetics-agent/internal/auth"
 )
 
 // Probe represents a synthetic monitoring probe configuration
@@ -30,12 +33,13 @@ type ProbeStatusUpdate struct {
 
 // Client handles communication with the RHOBS Probes API
 type Client struct {
-	BaseURL    string
-	HTTPClient *http.Client
-	JWTToken   string
+	BaseURL       string
+	HTTPClient    *http.Client
+	JWTToken      string
+	TokenProvider *auth.TokenProvider
 }
 
-// NewClient creates a new API client with a full URL
+// NewClient creates a new API client with a full URL and optional static JWT token
 func NewClient(apiURL, jwtToken string) *Client {
 	return &Client{
 		BaseURL:  apiURL,
@@ -46,8 +50,47 @@ func NewClient(apiURL, jwtToken string) *Client {
 	}
 }
 
+// NewClientWithOIDC creates a new API client with OIDC token provider
+func NewClientWithOIDC(apiURL string, tokenProvider *auth.TokenProvider) *Client {
+	return &Client{
+		BaseURL:       apiURL,
+		TokenProvider: tokenProvider,
+		HTTPClient: &http.Client{
+			Timeout: 30 * time.Second,
+		},
+	}
+}
+
+// addAuthHeaders adds authentication to the request
+// Priority: OIDC token provider > static JWT token
+func (c *Client) addAuthHeaders(ctx context.Context, req *http.Request) error {
+	// Try OIDC token provider first
+	if c.TokenProvider != nil {
+		token, err := c.TokenProvider.GetAccessToken(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to get OIDC access token: %w", err)
+		}
+		if token != "" {
+			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+			return nil
+		}
+	}
+
+	// Fall back to static JWT token
+	if c.JWTToken != "" {
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.JWTToken))
+	}
+
+	return nil
+}
+
 // GetProbes retrieves probes from the API with optional label selectors
 func (c *Client) GetProbes(labelSelector string) ([]Probe, error) {
+	return c.GetProbesWithContext(context.Background(), labelSelector)
+}
+
+// GetProbesWithContext retrieves probes from the API with context support
+func (c *Client) GetProbesWithContext(ctx context.Context, labelSelector string) ([]Probe, error) {
 	reqURL, err := url.Parse(c.BaseURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse URL: %w", err)
@@ -59,16 +102,16 @@ func (c *Client) GetProbes(labelSelector string) ([]Probe, error) {
 		reqURL.RawQuery = q.Encode()
 	}
 
-	req, err := http.NewRequest("GET", reqURL.String(), nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", reqURL.String(), nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
 
-	// Add JWT token if configured
-	if c.JWTToken != "" {
-		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.JWTToken))
+	// Add authentication headers
+	if err := c.addAuthHeaders(ctx, req); err != nil {
+		return nil, fmt.Errorf("failed to add auth headers: %w", err)
 	}
 
 	resp, err := c.HTTPClient.Do(req)
@@ -94,6 +137,11 @@ func (c *Client) GetProbes(labelSelector string) ([]Probe, error) {
 
 // UpdateProbeStatus updates the status of a probe
 func (c *Client) UpdateProbeStatus(probeID, status string) error {
+	return c.UpdateProbeStatusWithContext(context.Background(), probeID, status)
+}
+
+// UpdateProbeStatusWithContext updates the status of a probe with context support
+func (c *Client) UpdateProbeStatusWithContext(ctx context.Context, probeID, status string) error {
 	reqURL := fmt.Sprintf("%s/%s", c.BaseURL, probeID)
 
 	statusUpdate := ProbeStatusUpdate{Status: status}
@@ -102,16 +150,16 @@ func (c *Client) UpdateProbeStatus(probeID, status string) error {
 		return fmt.Errorf("failed to marshal status update: %w", err)
 	}
 
-	req, err := http.NewRequest("PATCH", reqURL, bytes.NewBuffer(payload))
+	req, err := http.NewRequestWithContext(ctx, "PATCH", reqURL, bytes.NewBuffer(payload))
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
 
-	// Add JWT token if configured
-	if c.JWTToken != "" {
-		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.JWTToken))
+	// Add authentication headers
+	if err := c.addAuthHeaders(ctx, req); err != nil {
+		return fmt.Errorf("failed to add auth headers: %w", err)
 	}
 
 	resp, err := c.HTTPClient.Do(req)
@@ -132,6 +180,11 @@ func (c *Client) UpdateProbeStatus(probeID, status string) error {
 
 // DeleteProbe marks a probe for deletion by setting status to "deleted"
 func (c *Client) DeleteProbe(probeID string) error {
+	return c.DeleteProbeWithContext(context.Background(), probeID)
+}
+
+// DeleteProbeWithContext marks a probe for deletion with context support
+func (c *Client) DeleteProbeWithContext(ctx context.Context, probeID string) error {
 	reqURL := fmt.Sprintf("%s/%s", c.BaseURL, probeID)
 
 	// Create request body with status "deleted"
@@ -144,16 +197,16 @@ func (c *Client) DeleteProbe(probeID string) error {
 		return fmt.Errorf("failed to marshal request body: %w", err)
 	}
 
-	req, err := http.NewRequest("PATCH", reqURL, bytes.NewBuffer(jsonBody))
+	req, err := http.NewRequestWithContext(ctx, "PATCH", reqURL, bytes.NewBuffer(jsonBody))
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
 
-	// Add JWT token if configured
-	if c.JWTToken != "" {
-		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.JWTToken))
+	// Add authentication headers
+	if err := c.addAuthHeaders(ctx, req); err != nil {
+		return fmt.Errorf("failed to add auth headers: %w", err)
 	}
 
 	resp, err := c.HTTPClient.Do(req)
