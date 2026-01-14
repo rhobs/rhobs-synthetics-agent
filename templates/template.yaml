@@ -35,6 +35,10 @@ objects:
     - apiGroups: ["monitoring.coreos.com"]
       resources: ["probes"]
       verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+    # Access to Prometheus CRDs (monitoring.coreos.com/v1) - for clusters with prometheus-operator
+    - apiGroups: ["monitoring.coreos.com"]
+      resources: ["prometheuses"]
+      verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
     # Access to create and manage Deployments for blackbox exporters
     - apiGroups: ["apps"]
       resources: ["deployments"]
