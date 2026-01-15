@@ -108,6 +108,11 @@ objects:
         interval: ${BLACKBOX_INTERVAL}
         module: ${BLACKBOX_MODULE}
         prober_url: ${BLACKBOX_PROBER_URL}
+
+      # Prometheus Configuration (for remote write to RHOBS)
+      prometheus:
+        remote_write_url: ${PROMETHEUS_REMOTE_WRITE_URL}
+        remote_write_tenant: ${PROMETHEUS_REMOTE_WRITE_TENANT}
 - apiVersion: apps/v1
   kind: Deployment
   metadata:
@@ -318,6 +323,11 @@ parameters:
   description: URL of the blackbox exporter prober
   value: synthetics-blackbox-prober-default-service:9115
   required: true
+- name: PROMETHEUS_REMOTE_WRITE_URL
+  displayName: Prometheus Remote Write URL
+  description: External Thanos receive endpoint URL for remote write (leave empty for in-cluster default)
+  value: ""
+  required: false
 - name: PROMETHEUS_REMOTE_WRITE_TENANT
   displayName: Prometheus Remote Write Tenant
   description: Thanos tenant identifier for remote write requests
