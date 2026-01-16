@@ -73,7 +73,8 @@ func main() {
 	startCmd.Flags().String("oidc-issuer-url", "", "OIDC issuer URL (token endpoint will be derived by appending /token)")
 
 	// Prometheus Config flags
-	startCmd.Flags().String("prometheus-remote-write-url", "http://thanos-receive-router-rhobs.rhobs-int.svc.cluster.local:19291/api/v1/receive", "Thanos remote write endpoint URL for Prometheus configuration")
+	// Default to empty string so prober.go uses namespace-aware URL: http://thanos-receive-router-rhobs.<namespace>.svc.cluster.local:19291/api/v1/receive
+	startCmd.Flags().String("prometheus-remote-write-url", "", "Thanos remote write endpoint URL for Prometheus configuration (defaults to namespace-aware in-cluster URL)")
 	startCmd.Flags().String("prometheus-remote-write-tenant", "hcp", "Thanos tenant identifier for remote write requests")
 	startCmd.Flags().String("prometheus-cpu-requests", "100m", "CPU requests for Prometheus pod")
 	startCmd.Flags().String("prometheus-cpu-limits", "500m", "CPU limits for Prometheus pod")

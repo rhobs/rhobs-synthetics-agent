@@ -103,8 +103,9 @@ label_selector: "private=false,"
 namespace: "monitoring"
 
 # Prometheus Configuration
+# remote_write_url defaults to http://thanos-receive-router-rhobs.<namespace>.svc.cluster.local:19291/api/v1/receive
 prometheus:
-  remote_write_url: "http://thanos-receive-router-rhobs.rhobs-int.svc.cluster.local:19291/api/v1/receive"
+  remote_write_url: ""  # Uses namespace-aware default, or set explicitly for cross-cluster
   remote_write_tenant: "my-tenant"
   cpu_requests: "200m"
   cpu_limits: "1000m"
@@ -130,7 +131,9 @@ export LABEL_SELECTOR="private=false,"
 export NAMESPACE="monitoring"
 
 # Prometheus configuration
-export PROMETHEUS_REMOTE_WRITE_URL="http://thanos-receive-router-rhobs.rhobs-int.svc.cluster.local:19291/api/v1/receive"
+# PROMETHEUS_REMOTE_WRITE_URL defaults to http://thanos-receive-router-rhobs.<namespace>.svc.cluster.local:19291/api/v1/receive
+# Only set explicitly for cross-cluster deployments:
+# export PROMETHEUS_REMOTE_WRITE_URL="https://rhobs.example.com/api/metrics/v1/tenant/api/v1/receive"
 export PROMETHEUS_REMOTE_WRITE_TENANT="my-tenant"
 export PROMETHEUS_CPU_REQUESTS="200m"
 export PROMETHEUS_CPU_LIMITS="1000m"
@@ -144,19 +147,22 @@ export PROMETHEUS_MANAGED_BY_OPERATOR="observability-operator"
 ### Command Line Flags
 
 ```bash
+# Basic usage (uses namespace-aware default for remote write URL)
 ./rhobs-synthetics-agent start \
   --config /path/to/config.yaml \
   --log-level debug \
   --interval 30s \
   --graceful-timeout 60s \
-  --api-urls "https://api1.example.com/api/metrics/v1/my-tenant/probes,https://api2.example.com/api/metrics/v1/my-tenant/probes" \
-  --prometheus-remote-write-url "http://thanos-receive-router-rhobs.rhobs-int.svc.cluster.local:19291/api/v1/receive" \
-  --prometheus-remote-write-tenant "my-tenant" \
-  --prometheus-cpu-requests "200m" \
-  --prometheus-cpu-limits "1000m" \
-  --prometheus-memory-requests "512Mi" \
-  --prometheus-memory-limits "1Gi" \
-  --prometheus-managed-by-operator "observability-operator"
+  --namespace "rhobs-stage" \
+  --api-urls "https://api1.example.com/api/metrics/v1/my-tenant/probes" \
+  --prometheus-remote-write-tenant "my-tenant"
+
+# Cross-cluster deployment (explicit remote write URL)
+./rhobs-synthetics-agent start \
+  --config /path/to/config.yaml \
+  --api-urls "https://rhobs.example.com/api/metrics/v1/my-tenant/probes" \
+  --prometheus-remote-write-url "https://rhobs.example.com/api/metrics/v1/my-tenant/api/v1/receive" \
+  --prometheus-remote-write-tenant "my-tenant"
 ```
 
 ## Prometheus Configuration
@@ -167,7 +173,7 @@ The agent can automatically create and manage a Prometheus instance for syntheti
 
 | Flag | Environment Variable | Config File Key | Default | Description |
 |------|---------------------|----------------|---------|-------------|
-| `--prometheus-remote-write-url` | `PROMETHEUS_REMOTE_WRITE_URL` | `prometheus.remote_write_url` | `http://thanos-receive-router-rhobs.rhobs-int.svc.cluster.local:19291/api/v1/receive` | Thanos remote write endpoint URL |
+| `--prometheus-remote-write-url` | `PROMETHEUS_REMOTE_WRITE_URL` | `prometheus.remote_write_url` | `""` (uses `http://thanos-receive-router-rhobs.<namespace>.svc.cluster.local:19291/api/v1/receive`) | Thanos remote write endpoint URL |
 | `--prometheus-remote-write-tenant` | `PROMETHEUS_REMOTE_WRITE_TENANT` | `prometheus.remote_write_tenant` | `hcp` | Thanos tenant identifier |
 | `--prometheus-cpu-requests` | `PROMETHEUS_CPU_REQUESTS` | `prometheus.cpu_requests` | `100m` | CPU requests for Prometheus pod |
 | `--prometheus-cpu-limits` | `PROMETHEUS_CPU_LIMITS` | `prometheus.cpu_limits` | `500m` | CPU limits for Prometheus pod |
