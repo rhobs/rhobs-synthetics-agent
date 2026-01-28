@@ -137,7 +137,7 @@ func (pm *ProbeManager) SetProbeAPIGroup(apiGroup string) {
 	pm.probeAPIGroup = apiGroup
 }
 
-// CreateProbeK8sResource creates and applies a Probe Custom Resource to Kubernetes
+// CreateProbeK8sResource creates or updates a Probe Custom Resource in Kubernetes
 func (pm *ProbeManager) CreateProbeK8sResource(probe api.Probe, config BlackboxProbingConfig) error {
 	// Check if we can create Kubernetes resources
 	if !pm.isK8sCluster() {
@@ -173,7 +173,7 @@ func (pm *ProbeManager) CreateProbeK8sResource(probe api.Probe, config BlackboxP
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// Create the resource in Kubernetes
+	// Try to create the resource in Kubernetes
 	_, err = pm.kubeClient.DynamicClient().Resource(probeGVR).Namespace(pm.namespace).Create(
 		ctx,
 		unstructuredCR,
@@ -181,9 +181,44 @@ func (pm *ProbeManager) CreateProbeK8sResource(probe api.Probe, config BlackboxP
 	)
 
 	if err != nil {
+		// If resource already exists, update it instead
+		if kerr.IsAlreadyExists(err) {
+			return pm.updateProbeK8sResource(ctx, probeGVR, unstructuredCR)
+		}
 		return fmt.Errorf("failed to create Probe resource in Kubernetes: %w", err)
 	}
 
+	return nil
+}
+
+// updateProbeK8sResource updates an existing Probe Custom Resource in Kubernetes
+func (pm *ProbeManager) updateProbeK8sResource(ctx context.Context, probeGVR schema.GroupVersionResource, desired *unstructured.Unstructured) error {
+	probeName := desired.GetName()
+
+	// Get the existing resource to preserve resourceVersion
+	existing, err := pm.kubeClient.DynamicClient().Resource(probeGVR).Namespace(pm.namespace).Get(
+		ctx,
+		probeName,
+		metav1.GetOptions{},
+	)
+	if err != nil {
+		return fmt.Errorf("failed to get existing Probe resource %s: %w", probeName, err)
+	}
+
+	// Set the resourceVersion from the existing resource (required for update)
+	desired.SetResourceVersion(existing.GetResourceVersion())
+
+	// Update the resource
+	_, err = pm.kubeClient.DynamicClient().Resource(probeGVR).Namespace(pm.namespace).Update(
+		ctx,
+		desired,
+		metav1.UpdateOptions{},
+	)
+	if err != nil {
+		return fmt.Errorf("failed to update Probe resource %s in Kubernetes: %w", probeName, err)
+	}
+
+	logger.Infof("Updated existing Probe resource %s", probeName)
 	return nil
 }
 

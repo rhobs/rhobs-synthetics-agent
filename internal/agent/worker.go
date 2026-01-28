@@ -218,6 +218,12 @@ func (w *Worker) processProbes(ctx context.Context, taskWG *sync.WaitGroup, shut
 		logger.Infof("successfully processed probes with status=pending")
 	}
 
+	if err := w.reconcileActiveProbes(ctx, shutdownChan); err != nil {
+		logger.Infof("error reconciling probes with status=active: %v", err)
+	} else {
+		logger.Infof("successfully reconciled probes with status=active")
+	}
+
 	if err := w.deleteProbe(ctx, shutdownChan); err != nil {
 		logger.Infof("error processing probes with status=terminating: %v", err)
 	} else {
@@ -349,6 +355,48 @@ func (w *Worker) createProbes(ctx context.Context, shutdownChan chan struct{}) e
 			logger.Infof("Successfully processed probe %s", probe.ID)
 			// Record successful probe resource operation
 			metrics.RecordProbeResourceOperation("create", true)
+		}
+	}
+	return nil
+}
+
+// reconcileActiveProbes ensures active probes have up-to-date Kubernetes resources
+// This handles cases where the agent code changes (e.g., new labels/relabelings)
+// and existing CRs need to be updated to match the new desired state.
+func (w *Worker) reconcileActiveProbes(ctx context.Context, shutdownChan chan struct{}) error {
+	// Fetch probe configurations from the API with status=active
+	labelSelector, err := w.setStatusSelector(ctx, "active")
+	if err != nil {
+		return fmt.Errorf("failed to set selector: %w", err)
+	}
+	probes, err := w.fetchProbeList(ctx, labelSelector)
+	if err != nil {
+		return fmt.Errorf("failed to fetch active probe list: %w", err)
+	}
+
+	if len(probes) == 0 {
+		logger.Debug("No active probes to reconcile")
+		return nil
+	}
+
+	logger.Infof("Reconciling %d active probes", len(probes))
+
+	// Reconcile each active probe - CreateProbeK8sResource will update if exists
+	for _, probe := range probes {
+		select {
+		case <-shutdownChan:
+			logger.Info("shutdown in progress, stopping probe reconciliation")
+			return nil
+		default:
+		}
+
+		err := w.probeManager.CreateProbeK8sResource(probe, w.config.Blackbox.Probing)
+		if err != nil {
+			logger.Debugf("Failed to reconcile probe %s: %v", probe.ID, err)
+			metrics.RecordProbeResourceOperation("reconcile", false)
+		} else {
+			logger.Debugf("Successfully reconciled probe %s", probe.ID)
+			metrics.RecordProbeResourceOperation("reconcile", true)
 		}
 	}
 	return nil
