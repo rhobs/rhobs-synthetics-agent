@@ -298,6 +298,15 @@ func (pm *ProbeManager) CreateProbeResource(probe api.Probe, config BlackboxProb
 					Labels:  targetLabels,
 				},
 			},
+			// Add _id label from cluster-id for compatibility with api-ErrorBudgetBurn alerts
+			// and limited support suppression (SREP-355)
+			MetricRelabelConfigs: []monitoringv1.RelabelConfig{
+				{
+					SourceLabels: []monitoringv1.LabelName{"cluster-id"},
+					TargetLabel:  "_id",
+					Action:       "replace",
+				},
+			},
 		},
 	}
 
