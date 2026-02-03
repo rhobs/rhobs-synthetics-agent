@@ -471,6 +471,39 @@ func (m *BlackBoxProberManager) buildProberDeployment(proberName string) appsv1.
 							Image:   m.cfg.Image,
 							Command: m.cfg.Cmd,
 							Args:    m.cfg.Args,
+							Ports: []corev1.ContainerPort{
+								{
+									Name:          "http",
+									ContainerPort: 9115,
+									Protocol:      corev1.ProtocolTCP,
+								},
+							},
+							LivenessProbe: &corev1.Probe{
+								ProbeHandler: corev1.ProbeHandler{
+									HTTPGet: &corev1.HTTPGetAction{
+										Path: "/-/healthy",
+										Port: intstr.FromInt32(9115),
+									},
+								},
+								InitialDelaySeconds: 10,
+								PeriodSeconds:       30,
+								TimeoutSeconds:      5,
+								SuccessThreshold:    1,
+								FailureThreshold:    3,
+							},
+							ReadinessProbe: &corev1.Probe{
+								ProbeHandler: corev1.ProbeHandler{
+									HTTPGet: &corev1.HTTPGetAction{
+										Path: "/-/healthy",
+										Port: intstr.FromInt32(9115),
+									},
+								},
+								InitialDelaySeconds: 5,
+								PeriodSeconds:       10,
+								TimeoutSeconds:      5,
+								SuccessThreshold:    1,
+								FailureThreshold:    3,
+							},
 						},
 					},
 				},
