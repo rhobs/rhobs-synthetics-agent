@@ -161,6 +161,18 @@ objects:
               - name: http
                 containerPort: 8080
                 protocol: TCP
+            livenessProbe:
+              httpGet:
+                path: /livez
+                port: 8080
+              initialDelaySeconds: 5
+              periodSeconds: 10
+            readinessProbe:
+              httpGet:
+                path: /readyz
+                port: 8080
+              initialDelaySeconds: 5
+              periodSeconds: 10
             env:
               - name: NAMESPACE
                 valueFrom:
