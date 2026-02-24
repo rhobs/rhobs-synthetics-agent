@@ -66,7 +66,7 @@ objects:
 - apiVersion: rbac.authorization.k8s.io/v1
   kind: ClusterRoleBinding
   metadata:
-    name: ${APPLICATION_NAME}
+    name: ${APPLICATION_NAME}-${NAMESPACE}
     labels:
       app.kubernetes.io/component: synthetics-agent
       app.kubernetes.io/instance: rhobs
