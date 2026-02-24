@@ -114,6 +114,7 @@ type BlackBoxProberManagerConfig struct {
 	PrometheusResources PrometheusResourceConfig
 	ManagedByOperator   string
 	OIDC                *OIDCConfig
+	PrometheusAPIGroup  string
 }
 
 // NewBlackBoxProberManager creates a new BlackBoxProberManager with the provided configuration
@@ -148,17 +149,24 @@ func NewBlackBoxProberManager(config BlackBoxProberManagerConfig) (*BlackBoxProb
 		kubeClient:          client.DynamicClient(),
 		fullClient:          client,
 		oidcConfig:          config.OIDC,
+		prometheusAPIGroup:  config.PrometheusAPIGroup,
 	}
 
-	// Detect which Prometheus API group is available
+	// Detect which Prometheus API group is available (skipped if explicitly configured)
 	manager.checkPrometheusCRDs()
 
 	return manager, nil
 }
 
-// checkPrometheusCRDs checks if Prometheus CRDs exist in the cluster and sets the API group
-// Prefers monitoring.rhobs over monitoring.coreos.com
+// checkPrometheusCRDs checks if Prometheus CRDs exist in the cluster and sets the API group.
+// Skips auto-detection if prometheusAPIGroup is already set (explicit configuration).
+// Prefers monitoring.rhobs over monitoring.coreos.com.
 func (m *BlackBoxProberManager) checkPrometheusCRDs() {
+	if m.prometheusAPIGroup != "" {
+		logger.Infof("Using explicitly configured Prometheus API group: %s", m.prometheusAPIGroup)
+		return
+	}
+
 	if m.fullClient == nil {
 		logger.Errorf("Cannot detect Prometheus CRDs: fullClient is nil")
 		return

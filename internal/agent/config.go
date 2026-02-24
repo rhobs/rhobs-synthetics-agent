@@ -45,6 +45,7 @@ type PrometheusConfig struct {
 	MemoryRequests    string `mapstructure:"memory_requests"`
 	MemoryLimits      string `mapstructure:"memory_limits"`
 	ManagedByOperator string `mapstructure:"managed_by_operator"`
+	APIGroup          string `mapstructure:"api_group"`
 }
 
 // Validate validates the PrometheusConfig fields

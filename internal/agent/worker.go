@@ -88,15 +88,20 @@ func NewWorker(cfg *Config) (*Worker, error) {
 		}
 	}
 
-	probeManager := k8s.NewProbeManager(namespace, kubeConfigPath)
+	apiGroup := ""
+	if cfg != nil {
+		apiGroup = cfg.Prometheus.APIGroup
+	}
+	probeManager := k8s.NewProbeManager(namespace, kubeConfigPath, apiGroup)
 	var proberManager k8s.ProberManager
 	var err error
 	if kubeConfigPath != "" || kubeclient.IsRunningInK8sCluster() {
 		// Create prober manager configuration
 		proberManagerConfig := k8s.BlackBoxProberManagerConfig{
-			Namespace:      namespace,
-			KubeconfigPath: kubeConfigPath,
-			Deployment:     blackboxDeploymentCfg,
+			Namespace:          namespace,
+			KubeconfigPath:     kubeConfigPath,
+			Deployment:         blackboxDeploymentCfg,
+			PrometheusAPIGroup: apiGroup,
 		}
 
 		// Set Prometheus configuration if config is provided

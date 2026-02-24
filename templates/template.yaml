@@ -117,6 +117,7 @@ objects:
       prometheus:
         remote_write_url: ${PROMETHEUS_REMOTE_WRITE_URL}
         remote_write_tenant: ${PROMETHEUS_REMOTE_WRITE_TENANT}
+        api_group: ${PROMETHEUS_API_GROUP}
 - apiVersion: apps/v1
   kind: Deployment
   metadata:
@@ -404,6 +405,11 @@ parameters:
   description: Thanos tenant identifier for remote write requests
   value: EFD08939-FE1D-41A1-A28A-BE9A9BC68003
   required: true
+- name: PROMETHEUS_API_GROUP
+  displayName: Prometheus API Group
+  description: API group for Prometheus and Probe CRs (monitoring.rhobs or monitoring.coreos.com). Auto-detected if empty.
+  value: "monitoring.rhobs"
+  required: false
 - name: OIDC_CLIENT_ID
   displayName: OIDC Client ID
   description: OIDC client ID for API authentication (optional, only needed for cross-cluster deployments)
