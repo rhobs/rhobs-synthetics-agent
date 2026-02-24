@@ -17,7 +17,7 @@ func TestProbeManager_ValidateURL(t *testing.T) {
 	}))
 	defer server.Close()
 
-	pm := NewProbeManager("test-namespace", "")
+	pm := NewProbeManager("test-namespace", "", "")
 
 	// Test valid URL
 	err := pm.ValidateURL(server.URL)
@@ -45,7 +45,7 @@ func TestProbeManager_CreateProbeResource(t *testing.T) {
 	}))
 	defer server.Close()
 
-	pm := NewProbeManager("monitoring", "")
+	pm := NewProbeManager("monitoring", "", "")
 	// Set API group for testing - test with monitoring.rhobs which should be preferred
 	pm.SetProbeAPIGroup("monitoring.rhobs")
 
@@ -113,7 +113,7 @@ func TestProbeManager_CreateProbeResource(t *testing.T) {
 }
 
 func TestProbeManager_CreateProbeResource_InvalidURL(t *testing.T) {
-	pm := NewProbeManager("monitoring", "")
+	pm := NewProbeManager("monitoring", "", "")
 
 	probe := api.Probe{
 		ID:        "test-probe-invalid",
@@ -156,7 +156,7 @@ func TestProbeManager_APIVersionFallback(t *testing.T) {
 	}))
 	defer server.Close()
 
-	pm := NewProbeManager("monitoring", "")
+	pm := NewProbeManager("monitoring", "", "")
 	// Force empty probeAPIGroup to test fallback behavior
 	pm.SetProbeAPIGroup("")
 
@@ -187,7 +187,7 @@ func TestProbeManager_APIVersionFallback(t *testing.T) {
 }
 
 func TestProbeManager_initializeK8sClients(t *testing.T) {
-	pm := NewProbeManager("test-namespace", "")
+	pm := NewProbeManager("test-namespace", "", "")
 
 	// After initialization, check state
 	if pm.isK8sCluster() {
@@ -213,7 +213,7 @@ func TestProbeManager_CreateProbeK8sResource_NotInCluster(t *testing.T) {
 	}))
 	defer server.Close()
 
-	pm := NewProbeManager("test-namespace", "")
+	pm := NewProbeManager("test-namespace", "", "")
 
 	probe := api.Probe{
 		ID:        "test-probe-k8s",

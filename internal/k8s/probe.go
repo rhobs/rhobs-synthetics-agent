@@ -28,10 +28,14 @@ type ProbeManager struct {
 	probeAPIGroup string // "monitoring.rhobs" or "monitoring.coreos.com" or ""
 }
 
-// NewProbeManager creates a new probe manager
-func NewProbeManager(namespace, kubeconfigPath string) *ProbeManager {
+// NewProbeManager creates a new probe manager.
+// probeAPIGroup can be set to explicitly configure which API group to use
+// (e.g. "monitoring.rhobs" or "monitoring.coreos.com"). If empty, the API group
+// is auto-detected from the cluster's available CRDs.
+func NewProbeManager(namespace, kubeconfigPath, probeAPIGroup string) *ProbeManager {
 	pm := &ProbeManager{
-		namespace: namespace,
+		namespace:     namespace,
+		probeAPIGroup: probeAPIGroup,
 		httpClient: &http.Client{
 			Timeout: 10 * time.Second,
 		},
@@ -91,8 +95,14 @@ func (pm *ProbeManager) isK8sCluster() bool {
 	return pm.kubeClient != nil
 }
 
-// checkProbeCRDs checks if Probe CRDs exist in the cluster
+// checkProbeCRDs checks if Probe CRDs exist in the cluster.
+// Skips auto-detection if probeAPIGroup is already set (explicit configuration).
 func (pm *ProbeManager) checkProbeCRDs() {
+	if pm.probeAPIGroup != "" {
+		logger.Infof("Using explicitly configured Probe API group: %s", pm.probeAPIGroup)
+		return
+	}
+
 	if pm.kubeClient == nil {
 		return
 	}

@@ -75,7 +75,7 @@ func TestAgent_E2E_KubernetesProbeCreation(t *testing.T) {
 
 	// Test K8s Probe Manager functionality
 	t.Run("TestProbeManagerCreation", func(t *testing.T) {
-		pm := k8s.NewProbeManager("monitoring", "")
+		pm := k8s.NewProbeManager("monitoring", "", "")
 
 		if pm == nil {
 			t.Fatal("ProbeManager should not be nil")
@@ -83,7 +83,7 @@ func TestAgent_E2E_KubernetesProbeCreation(t *testing.T) {
 	})
 
 	t.Run("TestProbeResourceCreation", func(t *testing.T) {
-		pm := k8s.NewProbeManager("monitoring", "")
+		pm := k8s.NewProbeManager("monitoring", "", "")
 
 		config := k8s.BlackboxProbingConfig{
 			Interval:  "30s",
@@ -167,7 +167,7 @@ func TestAgent_E2E_KubernetesProbeCreation(t *testing.T) {
 	})
 
 	t.Run("TestProbeResourceValidation", func(t *testing.T) {
-		pm := k8s.NewProbeManager("monitoring", "")
+		pm := k8s.NewProbeManager("monitoring", "", "")
 
 		// Test with invalid URL
 		invalidProbe := api.Probe{
@@ -352,7 +352,7 @@ func TestAgent_E2E_KubernetesProbeWithFakeClient(t *testing.T) {
 func createTestProbeManagerWithFakeClients(namespace string, kubeClient kubernetes.Interface, dynamicClient dynamic.Interface) *k8s.ProbeManager {
 	// We can't directly inject the clients into ProbeManager due to private fields,
 	// but we can test the CreateProbeResource method which is the core functionality
-	return k8s.NewProbeManager(namespace, "")
+	return k8s.NewProbeManager(namespace, "", "")
 }
 
 // Helper function to convert a Probe CRD to unstructured format
@@ -455,7 +455,7 @@ func TestAgent_E2E_KubernetesProbeEdgeCases(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			pm := k8s.NewProbeManager("test-namespace", "")
+			pm := k8s.NewProbeManager("test-namespace", "", "")
 
 			probeResource, err := pm.CreateProbeResource(tc.probe, tc.config)
 
