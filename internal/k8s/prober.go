@@ -444,8 +444,12 @@ func (m *BlackBoxProberManager) buildPrometheusResource() *promv1.Prometheus {
 					},
 				},
 				ServiceMonitorSelector: &metav1.LabelSelector{
-					MatchLabels: map[string]string{
-						"app.kubernetes.io/component": "synthetics-agent",
+					MatchExpressions: []metav1.LabelSelectorRequirement{
+						{
+							Key:      "app.kubernetes.io/component",
+							Operator: metav1.LabelSelectorOpIn,
+							Values:   []string{"synthetics-agent", "synthetics-api", "synthetics-bb-exporter"},
+						},
 					},
 				},
 				RemoteWrite: m.buildRemoteWriteSpecs(),
