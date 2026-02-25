@@ -408,7 +408,50 @@ func (m *BlackBoxProberManager) PrometheusNeedsRecreation(ctx context.Context) (
 		}
 	}
 
+	// Check if serviceMonitorSelector matches
+	expected := m.buildPrometheusResource()
+	if !selectorEqual(currentPrometheus.Spec.ServiceMonitorSelector, expected.Spec.ServiceMonitorSelector) {
+		logger.Infof("Prometheus serviceMonitorSelector mismatch, needs recreation")
+		return true, nil
+	}
+
 	return false, nil
+}
+
+// selectorEqual compares two LabelSelectors for equality.
+func selectorEqual(a, b *metav1.LabelSelector) bool {
+	if a == nil && b == nil {
+		return true
+	}
+	if a == nil || b == nil {
+		return false
+	}
+	if len(a.MatchLabels) != len(b.MatchLabels) {
+		return false
+	}
+	for k, v := range a.MatchLabels {
+		if b.MatchLabels[k] != v {
+			return false
+		}
+	}
+	if len(a.MatchExpressions) != len(b.MatchExpressions) {
+		return false
+	}
+	for i, expr := range a.MatchExpressions {
+		bExpr := b.MatchExpressions[i]
+		if expr.Key != bExpr.Key || expr.Operator != bExpr.Operator {
+			return false
+		}
+		if len(expr.Values) != len(bExpr.Values) {
+			return false
+		}
+		for j, v := range expr.Values {
+			if v != bExpr.Values[j] {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 // buildPrometheusResource creates a Prometheus resource for synthetic monitoring
