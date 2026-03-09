@@ -941,11 +941,15 @@ func TestBlackBoxProberManager_CreatePrometheus(t *testing.T) {
 			},
 		},
 		{
-			name: "errors are bubbled up",
+			name: "existing prometheus is deleted and recreated",
 			objs: []runtime.Object{emptyPrometheus(PrometheusResourceName, defaultNamespace)},
-			validate: func(_ clienttesting.ObjectTracker, err error) (bool, string) {
-				if err == nil {
-					return false, "expected error from conflicting resource, but none was returned"
+			validate: func(t clienttesting.ObjectTracker, err error) (bool, string) {
+				if err != nil {
+					return false, fmt.Sprintf("unexpected error recreating prometheus: %v", err)
+				}
+				_, err = t.Get(promv1.SchemeGroupVersion.WithResource("prometheuses"), defaultNamespace, PrometheusResourceName)
+				if err != nil {
+					return false, "expected prometheus object was not recreated"
 				}
 				return true, ""
 			},
