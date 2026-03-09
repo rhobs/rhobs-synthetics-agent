@@ -480,7 +480,11 @@ func (m *BlackBoxProberManager) buildPrometheusResource() *promv1.Prometheus {
 		},
 		Spec: promv1.PrometheusSpec{
 			CommonPrometheusFields: promv1.CommonPrometheusFields{
-				ProbeNamespaceSelector: &metav1.LabelSelector{},
+				ProbeNamespaceSelector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						"kubernetes.io/metadata.name": m.namespace,
+					},
+				},
 				ProbeSelector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{
 						"rhobs.monitoring/managed-by": SyntheticsAgentManagedByValue,
