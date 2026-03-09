@@ -337,6 +337,19 @@ func (m *BlackBoxProberManager) CreatePrometheus(ctx context.Context) error {
 
 	_, err = m.prometheusClient().Create(ctx, unstructuredPrometheus, metav1.CreateOptions{})
 	if err != nil {
+		if kerr.IsAlreadyExists(err) {
+			// Delete and recreate to ensure spec is up to date
+			if delErr := m.prometheusClient().Delete(ctx, PrometheusResourceName, metav1.DeleteOptions{}); delErr != nil {
+				return fmt.Errorf("failed to delete existing prometheus %q for recreation: %w",
+					fmt.Sprintf("%s/%s", m.namespace, PrometheusResourceName), delErr)
+			}
+			_, err = m.prometheusClient().Create(ctx, unstructuredPrometheus, metav1.CreateOptions{})
+			if err != nil {
+				return fmt.Errorf("failed to recreate prometheus %q: %w",
+					fmt.Sprintf("%s/%s", m.namespace, PrometheusResourceName), err)
+			}
+			return nil
+		}
 		return fmt.Errorf("failed to CREATE prometheus %q: %w",
 			fmt.Sprintf("%s/%s", m.namespace, PrometheusResourceName), err)
 	}
