@@ -710,8 +710,8 @@ func TestNewBlackBoxProberManager(t *testing.T) {
 				PrometheusResources: PrometheusResourceConfig{
 					CPURequests:    "100m",
 					CPULimits:      "500m",
-					MemoryRequests: "256Mi",
-					MemoryLimits:   "512Mi",
+					MemoryRequests: "512Mi",
+					MemoryLimits:   "1Gi",
 				},
 				ManagedByOperator: "test-operator",
 			}
@@ -772,8 +772,8 @@ func TestBlackBoxProberManager_PrometheusOperations(t *testing.T) {
 		prometheusResources: PrometheusResourceConfig{
 			CPURequests:    "100m",
 			CPULimits:      "500m",
-			MemoryRequests: "256Mi",
-			MemoryLimits:   "512Mi",
+			MemoryRequests: "512Mi",
+			MemoryLimits:   "1Gi",
 		},
 		managedByOperator: "test-operator",
 	}
@@ -835,8 +835,8 @@ func TestBlackBoxProberManager_PrometheusOperations(t *testing.T) {
 		t.Errorf("Expected CPU requests '100m', got %q", cpuRequest.String())
 	}
 
-	if memoryRequest := resources.Requests[corev1.ResourceMemory]; memoryRequest.String() != "256Mi" {
-		t.Errorf("Expected memory requests '256Mi', got %q", memoryRequest.String())
+	if memoryRequest := resources.Requests[corev1.ResourceMemory]; memoryRequest.String() != "512Mi" {
+		t.Errorf("Expected memory requests '512Mi', got %q", memoryRequest.String())
 	}
 
 	// Verify limits
@@ -844,8 +844,8 @@ func TestBlackBoxProberManager_PrometheusOperations(t *testing.T) {
 		t.Errorf("Expected CPU limits '500m', got %q", cpuLimit.String())
 	}
 
-	if memoryLimit := resources.Limits[corev1.ResourceMemory]; memoryLimit.String() != "512Mi" {
-		t.Errorf("Expected memory limits '512Mi', got %q", memoryLimit.String())
+	if memoryLimit := resources.Limits[corev1.ResourceMemory]; memoryLimit.String() != "1Gi" {
+		t.Errorf("Expected memory limits '1Gi', got %q", memoryLimit.String())
 	}
 }
 

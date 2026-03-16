@@ -614,7 +614,7 @@ func TestWorker_processPrometheus(t *testing.T) {
 			CPURequests:       "100m",
 			CPULimits:         "500m",
 			MemoryRequests:    "256Mi",
-			MemoryLimits:      "512Mi",
+			MemoryLimits:      "1Gi",
 			ManagedByOperator: "test-operator",
 		},
 	}
@@ -653,7 +653,7 @@ func TestWorker_managePrometheus(t *testing.T) {
 			CPURequests:       "100m",
 			CPULimits:         "500m",
 			MemoryRequests:    "256Mi",
-			MemoryLimits:      "512Mi",
+			MemoryLimits:      "1Gi",
 			ManagedByOperator: "test-operator",
 		},
 	}
