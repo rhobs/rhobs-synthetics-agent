@@ -10,6 +10,7 @@ import (
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/rhobs/rhobs-synthetics-agent/internal/api"
 	"github.com/rhobs/rhobs-synthetics-agent/internal/logger"
+	"github.com/rhobs/rhobs-synthetics-agent/internal/metrics"
 	"github.com/rhobs/rhobs-synthetics-api/pkg/kubeclient"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -264,6 +265,8 @@ func (pm *ProbeManager) DeleteProbeK8sResource(probe api.Probe) error {
 	probeName := fmt.Sprintf("probe-%s", probe.ID)
 	if clusterID, ok := probe.Labels["cluster-id"]; ok && clusterID != "" {
 		probeName = fmt.Sprintf("probe-%s", clusterID)
+	} else {
+		logger.Warnf("Probe %s is missing cluster-id label during deletion, using API probe ID", probe.ID)
 	}
 
 	logger.Debugf("Attempting to delete Probe resource: name=%s, namespace=%s, apiGroup=%s",
@@ -321,8 +324,13 @@ func (pm *ProbeManager) CreateProbeResource(probe api.Probe, config BlackboxProb
 	// Use cluster-id as the deterministic probe name to prevent orphaned duplicates.
 	// Previously used probe.ID which changes on every RMO heartbeat cycle, leaving
 	// old Probe CRs behind as orphans (caused 10k+ orphans on us-east-1).
+	clusterID, hasClusterID := probe.Labels["cluster-id"]
+	if !hasClusterID || clusterID == "" {
+		logger.Warnf("Probe %s is missing cluster-id label, falling back to API probe ID for CR name. This may cause orphaned Probe CRs.", probe.ID)
+		metrics.RecordProbeResourceOperation("missing_cluster_id", false)
+	}
 	probeName := fmt.Sprintf("probe-%s", probe.ID)
-	if clusterID, ok := probe.Labels["cluster-id"]; ok && clusterID != "" {
+	if hasClusterID && clusterID != "" {
 		probeName = fmt.Sprintf("probe-%s", clusterID)
 	}
 
