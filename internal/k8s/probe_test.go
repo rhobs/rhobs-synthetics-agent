@@ -53,6 +53,7 @@ func TestProbeManager_CreateProbeResource(t *testing.T) {
 		ID:        "test-probe-1",
 		StaticURL: server.URL,
 		Labels: map[string]string{
+			"cluster-id":            "cluster-123",
 			"cluster_id":            "cluster-123",
 			"management_cluster_id": "mgmt-cluster-456",
 			"private":               "false",
@@ -80,7 +81,8 @@ func TestProbeManager_CreateProbeResource(t *testing.T) {
 		t.Errorf("Expected Kind 'Probe', got %s", cr.Kind)
 	}
 
-	expectedName := "probe-test-probe-1"
+	// Name should be deterministic based on cluster-id label (not API probe ID)
+	expectedName := "probe-cluster-123"
 	if cr.Name != expectedName {
 		t.Errorf("Expected name '%s', got %s", expectedName, cr.Name)
 	}

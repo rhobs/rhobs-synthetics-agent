@@ -10,6 +10,7 @@ import (
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/rhobs/rhobs-synthetics-agent/internal/api"
 	"github.com/rhobs/rhobs-synthetics-agent/internal/logger"
+	"github.com/rhobs/rhobs-synthetics-agent/internal/metrics"
 	"github.com/rhobs/rhobs-synthetics-api/pkg/kubeclient"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -259,8 +260,14 @@ func (pm *ProbeManager) DeleteProbeK8sResource(probe api.Probe) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// Construct the probe name using the same pattern as in CreateProbeK8sResource
+	// Construct the probe name using deterministic cluster-id based naming.
+	// Falls back to API probe ID for probes without cluster-id.
 	probeName := fmt.Sprintf("probe-%s", probe.ID)
+	if clusterID, ok := probe.Labels["cluster-id"]; ok && clusterID != "" {
+		probeName = fmt.Sprintf("probe-%s", clusterID)
+	} else {
+		logger.Warnf("Probe %s is missing cluster-id label during deletion, using API probe ID", probe.ID)
+	}
 
 	logger.Debugf("Attempting to delete Probe resource: name=%s, namespace=%s, apiGroup=%s",
 		probeName, pm.namespace, pm.probeAPIGroup)
@@ -314,7 +321,19 @@ func (pm *ProbeManager) CreateProbeResource(probe api.Probe, config BlackboxProb
 		targetLabels[key] = value
 	}
 
-	// Create the Probe Custom Resource using the actual CRD types
+	// Use cluster-id as the deterministic probe name to prevent orphaned duplicates.
+	// Previously used probe.ID which changes on every RMO heartbeat cycle, leaving
+	// old Probe CRs behind as orphans (caused 10k+ orphans on us-east-1).
+	clusterID, hasClusterID := probe.Labels["cluster-id"]
+	if !hasClusterID || clusterID == "" {
+		logger.Warnf("Probe %s is missing cluster-id label, falling back to API probe ID for CR name. This may cause orphaned Probe CRs.", probe.ID)
+		metrics.RecordProbeResourceOperation("missing_cluster_id", false)
+	}
+	probeName := fmt.Sprintf("probe-%s", probe.ID)
+	if hasClusterID && clusterID != "" {
+		probeName = fmt.Sprintf("probe-%s", clusterID)
+	}
+
 	// Use detected API group, fallback to monitoring.coreos.com for backwards compatibility
 	apiGroup := pm.probeAPIGroup
 	if apiGroup == "" {
@@ -327,7 +346,7 @@ func (pm *ProbeManager) CreateProbeResource(probe api.Probe, config BlackboxProb
 			Kind:       "Probe",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("probe-%s", probe.ID),
+			Name:      probeName,
 			Namespace: pm.namespace,
 			Labels:    metadataLabels,
 		},
