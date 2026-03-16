@@ -78,8 +78,8 @@ func main() {
 	startCmd.Flags().String("prometheus-remote-write-tenant", "hcp", "Thanos tenant identifier for remote write requests")
 	startCmd.Flags().String("prometheus-cpu-requests", "100m", "CPU requests for Prometheus pod")
 	startCmd.Flags().String("prometheus-cpu-limits", "500m", "CPU limits for Prometheus pod")
-	startCmd.Flags().String("prometheus-memory-requests", "256Mi", "Memory requests for Prometheus pod")
-	startCmd.Flags().String("prometheus-memory-limits", "512Mi", "Memory limits for Prometheus pod")
+	startCmd.Flags().String("prometheus-memory-requests", "512Mi", "Memory requests for Prometheus pod")
+	startCmd.Flags().String("prometheus-memory-limits", "1Gi", "Memory limits for Prometheus pod")
 	startCmd.Flags().String("prometheus-managed-by-operator", "observability-operator", "Value for app.kubernetes.io/managed-by label on Prometheus resources")
 	startCmd.Flags().String("prometheus-api-group", "", "API group for Prometheus and Probe CRs (monitoring.rhobs or monitoring.coreos.com). Auto-detected if empty.")
 
