@@ -292,6 +292,30 @@ func (pm *ProbeManager) DeleteProbeK8sResource(probe api.Probe) error {
 	return nil
 }
 
+// scrapeIntervalForProbe returns the scrape interval for a probe based on its
+// private/public status. Private probes can use a different interval to
+// reduce load on TGW/PrivateLink infrastructure.
+func scrapeIntervalForProbe(probe api.Probe, config BlackboxProbingConfig) monitoringv1.Duration {
+	if probe.Labels["private"] == "true" && config.PrivateInterval != "" {
+		return monitoringv1.Duration(config.PrivateInterval)
+	}
+	return monitoringv1.Duration(config.Interval)
+}
+
+// scrapeTimeoutForProbe returns the scrape timeout for a probe based on its
+// private/public status. Private probes go through TGW/PrivateLink which adds
+// latency, so they get a longer timeout. Returns empty string if no override
+// is configured, deferring to the Prometheus global scrape_timeout.
+func scrapeTimeoutForProbe(probe api.Probe, config BlackboxProbingConfig) monitoringv1.Duration {
+	if probe.Labels["private"] == "true" && config.PrivateScrapeTimeout != "" {
+		return monitoringv1.Duration(config.PrivateScrapeTimeout)
+	}
+	if config.ScrapeTimeout != "" {
+		return monitoringv1.Duration(config.ScrapeTimeout)
+	}
+	return ""
+}
+
 // CreateProbeResource creates a Probe Custom Resource (compatible with both monitoring.coreos.com/v1 and monitoring.rhobs/v1)
 func (pm *ProbeManager) CreateProbeResource(probe api.Probe, config BlackboxProbingConfig) (*monitoringv1.Probe, error) {
 	if err := pm.ValidateURL(probe.StaticURL); err != nil {
@@ -351,8 +375,9 @@ func (pm *ProbeManager) CreateProbeResource(probe api.Probe, config BlackboxProb
 			Labels:    metadataLabels,
 		},
 		Spec: monitoringv1.ProbeSpec{
-			Module:   config.Module,
-			Interval: monitoringv1.Duration(config.Interval),
+			Module:        config.Module,
+			Interval:      scrapeIntervalForProbe(probe, config),
+			ScrapeTimeout: scrapeTimeoutForProbe(probe, config),
 			ProberSpec: monitoringv1.ProberSpec{
 				URL: config.ProberURL,
 			},
