@@ -99,9 +99,13 @@ objects:
 
       # Blackbox Configuration
       blackbox:
-        interval: ${BLACKBOX_INTERVAL}
-        module: ${BLACKBOX_MODULE}
-        prober_url: ${BLACKBOX_PROBER_URL}
+        probing:
+          interval: ${BLACKBOX_INTERVAL}
+          private_interval: ${BLACKBOX_PRIVATE_INTERVAL}
+          module: ${BLACKBOX_MODULE}
+          prober_url: ${BLACKBOX_PROBER_URL}
+          scrape_timeout: ${BLACKBOX_SCRAPE_TIMEOUT}
+          private_scrape_timeout: ${BLACKBOX_PRIVATE_SCRAPE_TIMEOUT}
 
       # Prometheus Configuration (for remote write to RHOBS)
       prometheus:
@@ -372,9 +376,14 @@ parameters:
   required: true
 - name: BLACKBOX_INTERVAL
   displayName: Blackbox Interval
-  description: Blackbox probe interval
+  description: Scrape interval for public probes
   value: 30s
   required: true
+- name: BLACKBOX_PRIVATE_INTERVAL
+  displayName: Blackbox Private Interval
+  description: Scrape interval for private probes (through TGW/PrivateLink)
+  value: 30s
+  required: false
 - name: BLACKBOX_MODULE
   displayName: Blackbox Module
   description: Blackbox exporter module to use
@@ -385,6 +394,16 @@ parameters:
   description: URL of the blackbox exporter prober
   value: synthetics-blackbox-prober-default-service:9115
   required: true
+- name: BLACKBOX_SCRAPE_TIMEOUT
+  displayName: Blackbox Scrape Timeout
+  description: Scrape timeout for public probes
+  value: 10s
+  required: false
+- name: BLACKBOX_PRIVATE_SCRAPE_TIMEOUT
+  displayName: Blackbox Private Scrape Timeout
+  description: Scrape timeout for private probes (longer for TGW/PrivateLink latency)
+  value: 15s
+  required: false
 - name: PROMETHEUS_REMOTE_WRITE_URL
   displayName: Prometheus Remote Write URL
   description: External Thanos receive endpoint URL for remote write (leave empty for in-cluster default)
