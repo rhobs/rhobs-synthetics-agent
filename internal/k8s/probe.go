@@ -174,6 +174,13 @@ func (pm *ProbeManager) CreateProbeK8sResource(probe api.Probe, config BlackboxP
 		return fmt.Errorf("failed to convert probe resource to unstructured data: %w", err)
 	}
 
+	// Remove empty bearerTokenSecret -- the Go struct serializes the zero-value
+	// SecretKeySelector as {key:"", name:""} which the prometheus-operator rejects
+	// with "unable to get secret '': resource name may not be empty"
+	if spec, ok := unstructuredCR.Object["spec"].(map[string]interface{}); ok {
+		delete(spec, "bearerTokenSecret")
+	}
+
 	// Define the GVR for Probe resources
 	probeGVR := schema.GroupVersionResource{
 		Group:    pm.probeAPIGroup,
