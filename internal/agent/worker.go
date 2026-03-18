@@ -243,6 +243,12 @@ func (w *Worker) processProbes(ctx context.Context, taskWG *sync.WaitGroup, shut
 		logger.Infof("successfully processed probes with status=terminating")
 	}
 
+	if err := w.cleanupOrphanedCRs(ctx, shutdownChan); err != nil {
+		logger.Infof("error cleaning up orphaned Probe CRs: %v", err)
+	} else {
+		logger.Infof("successfully cleaned up orphaned Probe CRs")
+	}
+
 	return nil
 }
 
@@ -522,6 +528,63 @@ func (w *Worker) deleteProbe(ctx context.Context, shutdownChan chan struct{}) er
 			continue
 		}
 		logger.Infof("Successfully deleted probe %s", probe.ID)
+	}
+	return nil
+}
+
+// cleanupOrphanedCRs deletes Probe CRs that have no corresponding probe in the API.
+// This catches CRs left behind when the API GC cleans stale probes or when probes
+// are removed without going through the terminating flow.
+func (w *Worker) cleanupOrphanedCRs(ctx context.Context, shutdownChan chan struct{}) error {
+	// List all managed Probe CRs
+	crNames, err := w.probeManager.ListManagedProbeCRNames()
+	if err != nil {
+		return fmt.Errorf("failed to list managed Probe CRs: %w", err)
+	}
+	if len(crNames) == 0 {
+		return nil
+	}
+
+	// Fetch all active + pending probes from the API to build the expected set
+	allProbes, err := w.fetchProbeList(ctx, w.config.LabelSelector)
+	if err != nil {
+		return fmt.Errorf("failed to fetch API probe list for orphan cleanup: %w", err)
+	}
+
+	// Build set of expected CR names (probe-<cluster-id> or probe-<api-id>)
+	expectedNames := make(map[string]bool)
+	for _, p := range allProbes {
+		if clusterID, ok := p.Labels["cluster-id"]; ok && clusterID != "" {
+			expectedNames[fmt.Sprintf("probe-%s", clusterID)] = true
+		}
+		expectedNames[fmt.Sprintf("probe-%s", p.ID)] = true
+	}
+
+	// Delete CRs not in the expected set
+	orphaned := 0
+	for _, name := range crNames {
+		select {
+		case <-shutdownChan:
+			logger.Info("shutdown in progress, stopping orphan cleanup")
+			return nil
+		default:
+		}
+
+		if expectedNames[name] {
+			continue
+		}
+
+		logger.Infof("Deleting orphaned Probe CR %s (not in API)", name)
+		err := w.probeManager.DeleteProbeK8sResource(api.Probe{ID: name[len("probe-"):]})
+		if err != nil {
+			logger.Warnf("Failed to delete orphaned Probe CR %s: %v", name, err)
+			continue
+		}
+		orphaned++
+	}
+
+	if orphaned > 0 {
+		logger.Infof("Cleaned up %d orphaned Probe CRs", orphaned)
 	}
 	return nil
 }
