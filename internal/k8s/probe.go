@@ -292,6 +292,38 @@ func (pm *ProbeManager) DeleteProbeK8sResource(probe api.Probe) error {
 	return nil
 }
 
+// ListManagedProbeCRNames returns the names of all Probe CRs managed by this agent.
+func (pm *ProbeManager) ListManagedProbeCRNames() ([]string, error) {
+	if !pm.isK8sCluster() || pm.probeAPIGroup == "" || pm.kubeClient == nil {
+		return nil, nil
+	}
+
+	probeGVR := schema.GroupVersionResource{
+		Group:    pm.probeAPIGroup,
+		Version:  "v1",
+		Resource: "probes",
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	list, err := pm.kubeClient.DynamicClient().Resource(probeGVR).Namespace(pm.namespace).List(
+		ctx,
+		metav1.ListOptions{
+			LabelSelector: fmt.Sprintf("%s=%s", "rhobs.monitoring/managed-by", SyntheticsAgentManagedByValue),
+		},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list managed Probe CRs: %w", err)
+	}
+
+	var names []string
+	for _, item := range list.Items {
+		names = append(names, item.GetName())
+	}
+	return names, nil
+}
+
 // scrapeIntervalForProbe returns the scrape interval for a probe based on its
 // private/public status. Private probes can use a different interval to
 // reduce load on TGW/PrivateLink infrastructure.
