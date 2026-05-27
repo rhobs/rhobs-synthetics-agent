@@ -1,6 +1,6 @@
 module github.com/rhobs/rhobs-synthetics-agent
 
-go 1.24.1
+go 1.25.0
 
 require (
 	github.com/oklog/run v1.2.0
@@ -61,7 +61,7 @@ require (
 	go.yaml.in/yaml/v2 v2.4.4 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/net v0.48.0 // indirect
-	golang.org/x/oauth2 v0.34.0 // indirect
+	golang.org/x/oauth2 v0.36.0 // indirect
 	golang.org/x/sys v0.39.0 // indirect
 	golang.org/x/term v0.38.0 // indirect
 	golang.org/x/text v0.32.0 // indirect
