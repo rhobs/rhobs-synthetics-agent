@@ -1,6 +1,6 @@
 module github.com/rhobs/rhobs-synthetics-agent
 
-go 1.24.1
+go 1.25.0
 
 require (
 	github.com/oklog/run v1.2.0
@@ -64,7 +64,7 @@ require (
 	golang.org/x/oauth2 v0.34.0 // indirect
 	golang.org/x/sys v0.39.0 // indirect
 	golang.org/x/term v0.38.0 // indirect
-	golang.org/x/text v0.32.0 // indirect
+	golang.org/x/text v0.37.0 // indirect
 	golang.org/x/time v0.14.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.13.0 // indirect
