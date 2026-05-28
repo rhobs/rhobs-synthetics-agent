@@ -27,7 +27,7 @@ build:
 	@echo "$(BINARY_NAME) built successfully."
 
 # Golangci-lint setup similar to API project
-GOLANGCI_LINT_VERSION ?= v2.0.2
+GOLANGCI_LINT_VERSION ?= v2.12.2
 GOLANGCI_LINT_BIN := $(shell go env GOPATH)/bin/golangci-lint
 
 lint: $(GOLANGCI_LINT_BIN)
@@ -43,7 +43,7 @@ $(GOLANGCI_LINT_BIN):
 	@echo "Checking for golangci-lint..."
 	@if [ ! -f "$@" ]; then \
 		echo "golangci-lint not found. Installing $(GOLANGCI_LINT_VERSION)..."; \
-		curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(dir $@) $(GOLANGCI_LINT_VERSION); \
+		curl -sSfL https://golangci-lint.run/install.sh | sh -s -- -b $(dir $@) $(GOLANGCI_LINT_VERSION); \
 	else \
 		echo "golangci-lint already installed."; \
 	fi
