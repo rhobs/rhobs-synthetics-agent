@@ -577,6 +577,111 @@ func TestPrometheusConfig_Validate(t *testing.T) {
 	}
 }
 
+func TestPrometheusConfig_ApplyDefaults(t *testing.T) {
+	tests := []struct {
+		name     string
+		config   PrometheusConfig
+		expected PrometheusConfig
+	}{
+		{
+			name:   "all empty fields get defaults",
+			config: PrometheusConfig{},
+			expected: PrometheusConfig{
+				CPURequests:    DefaultPrometheusCPURequests,
+				CPULimits:      DefaultPrometheusCPULimits,
+				MemoryRequests: DefaultPrometheusMemoryRequests,
+				MemoryLimits:   DefaultPrometheusMemoryLimits,
+			},
+		},
+		{
+			name: "explicit values are preserved",
+			config: PrometheusConfig{
+				CPURequests:    "200m",
+				CPULimits:      "1000m",
+				MemoryRequests: "1Gi",
+				MemoryLimits:   "4Gi",
+			},
+			expected: PrometheusConfig{
+				CPURequests:    "200m",
+				CPULimits:      "1000m",
+				MemoryRequests: "1Gi",
+				MemoryLimits:   "4Gi",
+			},
+		},
+		{
+			name: "partial config fills only missing fields",
+			config: PrometheusConfig{
+				CPULimits:    "750m",
+				MemoryLimits: "3Gi",
+			},
+			expected: PrometheusConfig{
+				CPURequests:    DefaultPrometheusCPURequests,
+				CPULimits:      "750m",
+				MemoryRequests: DefaultPrometheusMemoryRequests,
+				MemoryLimits:   "3Gi",
+			},
+		},
+		{
+			name: "non-resource fields are not touched",
+			config: PrometheusConfig{
+				RemoteWriteURL:    "http://example.com",
+				RemoteWriteTenant: "tenant",
+				ManagedByOperator: "operator",
+				APIGroup:          "monitoring.rhobs",
+			},
+			expected: PrometheusConfig{
+				RemoteWriteURL:    "http://example.com",
+				RemoteWriteTenant: "tenant",
+				ManagedByOperator: "operator",
+				APIGroup:          "monitoring.rhobs",
+				CPURequests:       DefaultPrometheusCPURequests,
+				CPULimits:         DefaultPrometheusCPULimits,
+				MemoryRequests:    DefaultPrometheusMemoryRequests,
+				MemoryLimits:      DefaultPrometheusMemoryLimits,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.config.ApplyDefaults()
+			if tt.config.CPURequests != tt.expected.CPURequests {
+				t.Errorf("CPURequests = %q, want %q", tt.config.CPURequests, tt.expected.CPURequests)
+			}
+			if tt.config.CPULimits != tt.expected.CPULimits {
+				t.Errorf("CPULimits = %q, want %q", tt.config.CPULimits, tt.expected.CPULimits)
+			}
+			if tt.config.MemoryRequests != tt.expected.MemoryRequests {
+				t.Errorf("MemoryRequests = %q, want %q", tt.config.MemoryRequests, tt.expected.MemoryRequests)
+			}
+			if tt.config.MemoryLimits != tt.expected.MemoryLimits {
+				t.Errorf("MemoryLimits = %q, want %q", tt.config.MemoryLimits, tt.expected.MemoryLimits)
+			}
+			if tt.config.RemoteWriteURL != tt.expected.RemoteWriteURL {
+				t.Errorf("RemoteWriteURL = %q, want %q", tt.config.RemoteWriteURL, tt.expected.RemoteWriteURL)
+			}
+			if tt.config.RemoteWriteTenant != tt.expected.RemoteWriteTenant {
+				t.Errorf("RemoteWriteTenant = %q, want %q", tt.config.RemoteWriteTenant, tt.expected.RemoteWriteTenant)
+			}
+		})
+	}
+}
+
+func TestPrometheusConfig_ApplyDefaults_Constants(t *testing.T) {
+	if DefaultPrometheusCPURequests != "100m" {
+		t.Errorf("DefaultPrometheusCPURequests = %q, want '100m'", DefaultPrometheusCPURequests)
+	}
+	if DefaultPrometheusCPULimits != "500m" {
+		t.Errorf("DefaultPrometheusCPULimits = %q, want '500m'", DefaultPrometheusCPULimits)
+	}
+	if DefaultPrometheusMemoryRequests != "512Mi" {
+		t.Errorf("DefaultPrometheusMemoryRequests = %q, want '512Mi'", DefaultPrometheusMemoryRequests)
+	}
+	if DefaultPrometheusMemoryLimits != "2Gi" {
+		t.Errorf("DefaultPrometheusMemoryLimits = %q, want '2Gi'", DefaultPrometheusMemoryLimits)
+	}
+}
+
 func TestLoadConfig_PrometheusConfig(t *testing.T) {
 	// Reset viper to ensure clean state
 	viper.Reset()

@@ -106,6 +106,7 @@ func NewWorker(cfg *Config) (*Worker, error) {
 
 		// Set Prometheus configuration if config is provided
 		if cfg != nil {
+			cfg.Prometheus.ApplyDefaults()
 			proberManagerConfig.RemoteWriteURL = cfg.Prometheus.RemoteWriteURL
 			proberManagerConfig.RemoteWriteTenant = cfg.Prometheus.RemoteWriteTenant
 			proberManagerConfig.PrometheusResources = k8s.PrometheusResourceConfig{

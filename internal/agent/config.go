@@ -37,6 +37,13 @@ type Config struct {
 	Blackbox k8s.BlackboxConfig `mapstructure:"blackbox"`
 }
 
+const (
+	DefaultPrometheusCPURequests    = "100m"
+	DefaultPrometheusCPULimits      = "500m"
+	DefaultPrometheusMemoryRequests = "512Mi"
+	DefaultPrometheusMemoryLimits   = "2Gi"
+)
+
 type PrometheusConfig struct {
 	RemoteWriteURL    string `mapstructure:"remote_write_url"`
 	RemoteWriteTenant string `mapstructure:"remote_write_tenant"`
@@ -46,6 +53,21 @@ type PrometheusConfig struct {
 	MemoryLimits      string `mapstructure:"memory_limits"`
 	ManagedByOperator string `mapstructure:"managed_by_operator"`
 	APIGroup          string `mapstructure:"api_group"`
+}
+
+func (pc *PrometheusConfig) ApplyDefaults() {
+	if pc.CPURequests == "" {
+		pc.CPURequests = DefaultPrometheusCPURequests
+	}
+	if pc.CPULimits == "" {
+		pc.CPULimits = DefaultPrometheusCPULimits
+	}
+	if pc.MemoryRequests == "" {
+		pc.MemoryRequests = DefaultPrometheusMemoryRequests
+	}
+	if pc.MemoryLimits == "" {
+		pc.MemoryLimits = DefaultPrometheusMemoryLimits
+	}
 }
 
 // Validate validates the PrometheusConfig fields
