@@ -112,6 +112,9 @@ objects:
         remote_write_url: ${PROMETHEUS_REMOTE_WRITE_URL}
         remote_write_tenant: ${PROMETHEUS_REMOTE_WRITE_TENANT}
         api_group: ${PROMETHEUS_API_GROUP}
+        cpu_limits: ${PROMETHEUS_CPU_LIMIT}
+        memory_requests: ${PROMETHEUS_MEMORY_REQUEST}
+        memory_limits: ${PROMETHEUS_MEMORY_LIMIT}
 - apiVersion: apps/v1
   kind: Deployment
   metadata:
@@ -433,4 +436,19 @@ parameters:
   displayName: OIDC Issuer URL
   description: OIDC issuer URL for token endpoint (optional, only needed for cross-cluster deployments)
   value: ""
+  required: false
+- name: PROMETHEUS_CPU_LIMIT
+  displayName: Prometheus CPU Limit
+  description: Maximum CPU for the Prometheus sidecar that scrapes and remote-writes probe metrics
+  value: "500m"
+  required: false
+- name: PROMETHEUS_MEMORY_REQUEST
+  displayName: Prometheus Memory Request
+  description: Minimum memory for the Prometheus sidecar
+  value: "512Mi"
+  required: false
+- name: PROMETHEUS_MEMORY_LIMIT
+  displayName: Prometheus Memory Limit
+  description: Maximum memory for the Prometheus sidecar. Increase for cells with many probes to prevent OOM during WAL replay.
+  value: "2Gi"
   required: false
