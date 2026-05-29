@@ -6,6 +6,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/fsnotify/fsnotify"
 	"github.com/rhobs/rhobs-synthetics-agent/internal/agent"
 	"github.com/rhobs/rhobs-synthetics-agent/internal/logger"
 	"github.com/spf13/cobra"
@@ -28,6 +29,10 @@ func main() {
 				if err := viper.ReadInConfig(); err != nil {
 					return fmt.Errorf("failed to read config: %w", err)
 				}
+				viper.WatchConfig()
+				viper.OnConfigChange(func(e fsnotify.Event) {
+					logger.Infof("Config file changed: %s, reloading", e.Name)
+				})
 			}
 			return nil
 		},
