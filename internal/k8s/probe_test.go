@@ -112,6 +112,18 @@ func TestProbeManager_CreateProbeResource(t *testing.T) {
 	if cr.Spec.Targets.StaticConfig.Labels["cluster_id"] != "cluster-123" {
 		t.Errorf("Expected cluster_id 'cluster-123', got %s", cr.Spec.Targets.StaticConfig.Labels["cluster_id"])
 	}
+
+	// probe_url must be set so probe_success metrics match alert rule selector
+	// probe_success{probe_url=~".*api.*"} used by api-ErrorBudgetBurn (ROSAENG-60340)
+	if cr.Spec.Targets.StaticConfig.Labels["probe_url"] != server.URL {
+		t.Errorf("Expected probe_url '%s', got %s", server.URL, cr.Spec.Targets.StaticConfig.Labels["probe_url"])
+	}
+
+	// last-reconciled must NOT be in target labels — it changes every reconcile cycle,
+	// creating a new Prometheus time series that breaks burn rate window continuity
+	if _, exists := cr.Spec.Targets.StaticConfig.Labels["last-reconciled"]; exists {
+		t.Error("last-reconciled must not be in target labels (it creates time series churn)")
+	}
 }
 
 func TestProbeManager_CreateProbeResource_InvalidURL(t *testing.T) {
