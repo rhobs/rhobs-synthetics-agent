@@ -252,9 +252,12 @@ func (pm *ProbeManager) CreateProbeResource(probe api.Probe, config BlackboxProb
 		"rhobs.monitoring/managed-by": SyntheticsAgentManagedByValue,
 	}
 
-	// Create target labels starting with basic probe information
+	// Create target labels starting with basic probe information.
+	// probe_url is required so probe_success metrics match the alert rule selector
+	// probe_success{probe_url=~".*api.*"} used by api-ErrorBudgetBurn (ROSAENG-60340).
 	targetLabels := map[string]string{
 		"apiserver_url": probe.StaticURL,
+		"probe_url":     probe.StaticURL,
 	}
 
 	// Add all probe labels to both metadata and target labels generically
@@ -265,7 +268,13 @@ func (pm *ProbeManager) CreateProbeResource(probe api.Probe, config BlackboxProb
 			metadataLabels[metadataKey] = value
 		}
 
-		// Add all labels to target labels as-is
+		// Exclude last-reconciled from metric labels. It changes on every RMO
+		// reconciliation cycle, creating a new Prometheus time series each time.
+		// This breaks burn rate window continuity and for: timer stability in alerts.
+		if key == "last-reconciled" {
+			continue
+		}
+
 		targetLabels[key] = value
 	}
 
