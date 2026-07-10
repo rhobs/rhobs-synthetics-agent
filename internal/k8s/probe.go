@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"reflect"
 	"time"
 
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
@@ -209,7 +210,9 @@ func (pm *ProbeManager) CreateProbeK8sResource(probe api.Probe, config BlackboxP
 	return nil
 }
 
-// updateProbeK8sResource updates an existing Probe Custom Resource in Kubernetes
+// updateProbeK8sResource updates an existing Probe Custom Resource in Kubernetes.
+// It compares the desired spec against the existing one and skips the Update call
+// when they are identical, preventing unnecessary Prometheus config reloads.
 func (pm *ProbeManager) updateProbeK8sResource(ctx context.Context, probeGVR schema.GroupVersionResource, desired *unstructured.Unstructured) error {
 	probeName := desired.GetName()
 
@@ -221,6 +224,13 @@ func (pm *ProbeManager) updateProbeK8sResource(ctx context.Context, probeGVR sch
 	)
 	if err != nil {
 		return fmt.Errorf("failed to get existing Probe resource %s: %w", probeName, err)
+	}
+
+	// Skip the update when the spec is unchanged to avoid triggering unnecessary
+	// Prometheus config reloads (ROSAENG-59408).
+	if reflect.DeepEqual(existing.Object["spec"], desired.Object["spec"]) {
+		metrics.RecordProbeUpdateDecision("skipped")
+		return nil
 	}
 
 	// Set the resourceVersion from the existing resource (required for update)
@@ -236,6 +246,7 @@ func (pm *ProbeManager) updateProbeK8sResource(ctx context.Context, probeGVR sch
 		return fmt.Errorf("failed to update Probe resource %s in Kubernetes: %w", probeName, err)
 	}
 
+	metrics.RecordProbeUpdateDecision("applied")
 	logger.Infof("Updated existing Probe resource %s", probeName)
 	return nil
 }

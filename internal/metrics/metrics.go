@@ -68,6 +68,15 @@ var (
 		},
 	)
 
+	// Probe update decision metrics (applied vs skipped)
+	probeUpdateDecisions = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "rhobs_synthetics_agent_probe_update_decisions_total",
+			Help: "Total number of probe CR update decisions during active reconciliation; decision is 'applied' when spec changed, 'skipped' when spec is unchanged",
+		},
+		[]string{"decision"},
+	)
+
 	// General agent metrics
 	agentInfo = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
@@ -84,6 +93,7 @@ func init() {
 		probeListFetchTotal,
 		probeResourcesManaged,
 		probeResourceOperations,
+		probeUpdateDecisions,
 		reconciliationDuration,
 		reconciliationTotal,
 		lastReconciliationTime,
@@ -115,6 +125,12 @@ func RecordProbeResourceOperation(operation string, success bool) {
 	}
 	
 	probeResourceOperations.WithLabelValues(operation, status).Inc()
+}
+
+// RecordProbeUpdateDecision records whether an active probe reconciliation updated or skipped the Probe CR.
+// decision must be "applied" (spec changed, update written) or "skipped" (spec unchanged).
+func RecordProbeUpdateDecision(decision string) {
+	probeUpdateDecisions.WithLabelValues(decision).Inc()
 }
 
 // RecordReconciliation records reconciliation cycle metrics

@@ -729,6 +729,86 @@ func TestWorker_PrometheusConfigDefaults(t *testing.T) {
 	}
 }
 
+func TestWorker_reconcileActiveProbes_NoAPIClients(t *testing.T) {
+	cfg := &Config{
+		PollingInterval: 30 * time.Second,
+		GracefulTimeout: 30 * time.Second,
+		APIURLs:         []string{},
+	}
+
+	worker, err := NewWorker(cfg)
+	if err != nil {
+		t.Fatalf("unexpected error creating worker: %v", err)
+	}
+
+	shutdownChan := make(chan struct{})
+	ctx := context.Background()
+
+	// Should return nil immediately when no API clients configured
+	err = worker.reconcileActiveProbes(ctx, shutdownChan)
+	if err != nil {
+		t.Errorf("reconcileActiveProbes() should return nil when no API clients, got: %v", err)
+	}
+}
+
+func TestWorker_processProbes_NilConfig(t *testing.T) {
+	// With nil config, processProbes should return early (standalone mode)
+	// without panicking — the nil-config guard is at the processProbes level.
+	worker, err := NewWorker(nil)
+	if err != nil {
+		t.Fatalf("unexpected error creating worker: %v", err)
+	}
+
+	var taskWG sync.WaitGroup
+	shutdownChan := make(chan struct{})
+	ctx := context.Background()
+
+	err = worker.processProbes(ctx, &taskWG, shutdownChan)
+	if err != nil {
+		t.Errorf("processProbes() should return nil when config is nil (standalone mode), got: %v", err)
+	}
+	taskWG.Wait()
+}
+
+func TestWorker_reconcileActiveProbes_ShutdownSignal(t *testing.T) {
+	// Mock API server that returns a single active probe in the correct response format.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"probes":[{"id":"p1","static_url":"http://example.com","status":"active","labels":{}}]}`))
+	}))
+	defer server.Close()
+
+	cfg := &Config{
+		PollingInterval: 30 * time.Second,
+		GracefulTimeout: 30 * time.Second,
+		APIURLs:         []string{server.URL + "/api/metrics/v1/test/probes"},
+		LabelSelector:   "test=true",
+		Blackbox: k8s.BlackboxConfig{
+			Probing: k8s.BlackboxProbingConfig{
+				Interval:  "30s",
+				Module:    "http_2xx",
+				ProberURL: "synthetics-blackbox-prober-default-service:9115",
+			},
+		},
+	}
+
+	worker, err := NewWorker(cfg)
+	if err != nil {
+		t.Fatalf("unexpected error creating worker: %v", err)
+	}
+
+	// Pre-close the shutdown channel so the per-probe loop exits immediately.
+	shutdownChan := make(chan struct{})
+	close(shutdownChan)
+
+	ctx := context.Background()
+	err = worker.reconcileActiveProbes(ctx, shutdownChan)
+	if err != nil {
+		t.Errorf("reconcileActiveProbes() should not error on shutdown signal, got: %v", err)
+	}
+}
+
 func TestNewWorker_EdgeCases(t *testing.T) {
 	// Test with config containing empty URL in the slice
 	cfg := &Config{

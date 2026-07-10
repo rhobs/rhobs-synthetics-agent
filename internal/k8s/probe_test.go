@@ -273,6 +273,7 @@ func TestProbeManager_CreateProbeK8sResource_NotInCluster(t *testing.T) {
 	}
 }
 
+
 func TestProbeManager_checkProbeCRDs_NoClient(t *testing.T) {
 	pm := &ProbeManager{
 		namespace:     "test",

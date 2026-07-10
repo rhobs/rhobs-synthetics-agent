@@ -148,6 +148,28 @@ func TestRecordProbeResourceOperation(t *testing.T) {
 	}
 }
 
+func TestRecordProbeUpdateDecision(t *testing.T) {
+	testCases := []struct {
+		name     string
+		decision string
+	}{
+		{"applied decision", "applied"},
+		{"skipped decision", "skipped"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			RecordProbeUpdateDecision(tc.decision)
+
+			counter := probeUpdateDecisions.WithLabelValues(tc.decision)
+			value := testutil.ToFloat64(counter)
+			if value < 1 {
+				t.Errorf("Expected counter to be incremented for decision=%q, got %f", tc.decision, value)
+			}
+		})
+	}
+}
+
 func TestRecordReconciliation(t *testing.T) {
 	testCases := []struct {
 		name           string
@@ -370,10 +392,11 @@ func TestMetricTypes(t *testing.T) {
 	expectedTypes := map[string]string{
 		"rhobs_synthetics_agent_probe_list_fetch_duration_seconds": "histogram",
 		"rhobs_synthetics_agent_probe_list_fetch_total":            "counter",
-		"rhobs_synthetics_agent_probe_resources_managed":          "gauge",
-		"rhobs_synthetics_agent_probe_resource_operations_total":  "counter",
-		"rhobs_synthetics_agent_reconciliation_duration_seconds":  "histogram",
-		"rhobs_synthetics_agent_reconciliation_total":             "counter",
+		"rhobs_synthetics_agent_probe_resources_managed":           "gauge",
+		"rhobs_synthetics_agent_probe_resource_operations_total":   "counter",
+		"rhobs_synthetics_agent_probe_update_decisions_total":      "counter",
+		"rhobs_synthetics_agent_reconciliation_duration_seconds":   "histogram",
+		"rhobs_synthetics_agent_reconciliation_total":              "counter",
 		"rhobs_synthetics_agent_last_reconciliation_timestamp_seconds": "gauge",
 		"rhobs_synthetics_agent_info": "gauge",
 	}
