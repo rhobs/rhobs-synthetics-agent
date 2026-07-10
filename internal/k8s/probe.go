@@ -227,10 +227,22 @@ func (pm *ProbeManager) updateProbeK8sResource(ctx context.Context, probeGVR sch
 	}
 
 	// Skip the update when the spec is unchanged to avoid triggering unnecessary
-	// Prometheus config reloads (ROSAENG-59408).
-	if reflect.DeepEqual(existing.Object["spec"], desired.Object["spec"]) {
+	// Prometheus config reloads (ROSAENG-59408). Compare via typed structs so that
+	// Kubernetes normalisation (zero-value fields, nil vs empty slices) doesn't
+	// create spurious diffs between the raw unstructured maps.
+	existingTyped := &monitoringv1.Probe{}
+	desiredTyped := &monitoringv1.Probe{}
+	errExisting := convertFromUnstructured(existing, existingTyped)
+	errDesired := convertFromUnstructured(desired, desiredTyped)
+	if errExisting != nil {
+		logger.Debugf("spec comparison skipped for %s: could not convert existing CR: %v", probeName, errExisting)
+	} else if errDesired != nil {
+		logger.Debugf("spec comparison skipped for %s: could not convert desired CR: %v", probeName, errDesired)
+	} else if reflect.DeepEqual(existingTyped.Spec, desiredTyped.Spec) {
 		metrics.RecordProbeUpdateDecision("skipped")
 		return nil
+	} else {
+		logger.Debugf("probe %s spec changed, applying update", probeName)
 	}
 
 	// Set the resourceVersion from the existing resource (required for update)
@@ -438,7 +450,8 @@ func (pm *ProbeManager) CreateProbeResource(probe api.Probe, config BlackboxProb
 			Interval:      scrapeIntervalForProbe(probe, config),
 			ScrapeTimeout: scrapeTimeoutForProbe(probe, config),
 			ProberSpec: monitoringv1.ProberSpec{
-				URL: config.ProberURL,
+				URL:  config.ProberURL,
+				Path: "/probe",
 			},
 			Targets: monitoringv1.ProbeTargets{
 				StaticConfig: &monitoringv1.ProbeTargetStaticConfig{
