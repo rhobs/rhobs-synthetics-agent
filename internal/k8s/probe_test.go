@@ -1,13 +1,22 @@
 package k8s
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/rhobs/rhobs-synthetics-agent/internal/api"
 	"github.com/rhobs/rhobs-synthetics-api/pkg/kubeclient"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/dynamic/fake"
+	clienttesting "k8s.io/client-go/testing"
 )
 
 func TestProbeManager_ValidateURL(t *testing.T) {
@@ -57,6 +66,7 @@ func TestProbeManager_CreateProbeResource(t *testing.T) {
 			"cluster_id":            "cluster-123",
 			"management_cluster_id": "mgmt-cluster-456",
 			"private":               "false",
+			"last-reconciled":       "2026-07-15T00:00:00Z", // must be excluded from target labels
 		},
 		Status: "pending",
 	}
@@ -209,13 +219,13 @@ func TestProbeManager_initializeK8sClients(t *testing.T) {
 		if pm.kubeClient == nil {
 			t.Error("kubeClient should not be nil when in K8s cluster")
 		}
-		if pm.kubeClient.DynamicClient() == nil {
+		if pm.dynamicClient == nil {
 			t.Error("dynamicClient should not be nil when in K8s cluster")
 		}
 	} else {
 		// If we're not in a K8s cluster (normal test case)
-		if pm.kubeClient != nil {
-			t.Error("kubeClient should be nil when not in K8s cluster")
+		if pm.dynamicClient != nil {
+			t.Error("dynamicClient should be nil when not in K8s cluster")
 		}
 	}
 }
@@ -288,3 +298,132 @@ func TestProbeManager_checkProbeCRDs_NoClient(t *testing.T) {
 		t.Error("probeAPIGroup should be empty when kubeClient is nil")
 	}
 }
+
+// newTestProbeManager creates a ProbeManager with a fake dynamic client for unit testing.
+func newTestProbeManager(namespace, apiGroup string, dynClient dynamic.Interface) *ProbeManager {
+	return &ProbeManager{
+		namespace:     namespace,
+		probeAPIGroup: apiGroup,
+		dynamicClient: dynClient,
+		httpClient:    &http.Client{},
+	}
+}
+
+// newFakeDynamicClient returns a fake dynamic client seeded with the given objects.
+// The scheme is kept minimal; objects are stored as unstructured.
+func newFakeDynamicClient(objs ...runtime.Object) *fake.FakeDynamicClient {
+	s := runtime.NewScheme()
+	// Register the Probe list type so the fake client can handle lists.
+	s.AddKnownTypeWithName(
+		schema.GroupVersionKind{Group: "monitoring.rhobs", Version: "v1", Kind: "ProbeList"},
+		&unstructured.UnstructuredList{},
+	)
+	return fake.NewSimpleDynamicClient(s, objs...)
+}
+
+// makeProbeUnstructured builds an *unstructured.Unstructured representing a Probe CR.
+func makeProbeUnstructured(name, namespace, apiGroup, interval string) *unstructured.Unstructured {
+	return &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": apiGroup + "/v1",
+			"kind":       "Probe",
+			"metadata": map[string]interface{}{
+				"name":            name,
+				"namespace":       namespace,
+				"resourceVersion": "1",
+			},
+			"spec": map[string]interface{}{
+				"interval": interval,
+				"module":   "http_2xx",
+				"prober": map[string]interface{}{
+					"url":  "synthetics-blackbox-prober-default-service:9115",
+					"path": "/probe",
+				},
+				"targets": map[string]interface{}{
+					"staticConfig": map[string]interface{}{
+						"static": []interface{}{"https://example.com"},
+						"labels": map[string]interface{}{},
+					},
+				},
+			},
+		},
+	}
+}
+
+func TestProbeManager_updateProbeK8sResource(t *testing.T) {
+	const (
+		ns       = "test-ns"
+		apiGroup = "monitoring.rhobs"
+		name     = "probe-test"
+	)
+	gvr := schema.GroupVersionResource{Group: apiGroup, Version: "v1", Resource: "probes"}
+	ctx := context.Background()
+
+	t.Run("identical spec returns nil without calling Update", func(t *testing.T) {
+		existing := makeProbeUnstructured(name, ns, apiGroup, "30s")
+		desired := makeProbeUnstructured(name, ns, apiGroup, "30s")
+
+		dynClient := newFakeDynamicClient(existing)
+		pm := newTestProbeManager(ns, apiGroup, dynClient)
+
+		if err := pm.updateProbeK8sResource(ctx, gvr, desired); err != nil {
+			t.Fatalf("expected nil, got: %v", err)
+		}
+
+		// No Update action should have been sent to the fake client.
+		for _, action := range dynClient.Actions() {
+			if action.GetVerb() == "update" {
+				t.Error("Update was called despite identical spec")
+			}
+		}
+	})
+
+	t.Run("changed spec returns nil and calls Update", func(t *testing.T) {
+		existing := makeProbeUnstructured(name, ns, apiGroup, "30s")
+		desired := makeProbeUnstructured(name, ns, apiGroup, "60s") // different interval
+
+		dynClient := newFakeDynamicClient(existing)
+		pm := newTestProbeManager(ns, apiGroup, dynClient)
+
+		if err := pm.updateProbeK8sResource(ctx, gvr, desired); err != nil {
+			t.Fatalf("expected nil, got: %v", err)
+		}
+
+		updateSeen := false
+		for _, action := range dynClient.Actions() {
+			if action.GetVerb() == "update" {
+				updateSeen = true
+				ua, ok := action.(clienttesting.UpdateAction)
+				if !ok {
+					t.Fatal("expected UpdateAction")
+				}
+				updated := ua.GetObject().(*unstructured.Unstructured)
+				if updated.GetResourceVersion() != "1" {
+					t.Errorf("resourceVersion must be preserved from existing CR, got %q", updated.GetResourceVersion())
+				}
+			}
+		}
+		if !updateSeen {
+			t.Error("expected Update to be called for changed spec")
+		}
+	})
+
+	t.Run("resource not found returns error", func(t *testing.T) {
+		desired := makeProbeUnstructured(name, ns, apiGroup, "30s")
+
+		dynClient := newFakeDynamicClient() // empty — no existing CR
+		pm := newTestProbeManager(ns, apiGroup, dynClient)
+
+		err := pm.updateProbeK8sResource(ctx, gvr, desired)
+		if err == nil {
+			t.Fatal("expected error for missing resource, got nil")
+		}
+		if !strings.Contains(err.Error(), "failed to get existing Probe resource") {
+			t.Errorf("unexpected error: %v", err)
+		}
+	})
+}
+
+// Compile-time assertion: monitoringv1 is imported for convertFromUnstructured coverage.
+var _ = monitoringv1.Probe{}
+var _ = metav1.GetOptions{}

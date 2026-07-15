@@ -809,6 +809,83 @@ func TestWorker_reconcileActiveProbes_ShutdownSignal(t *testing.T) {
 	}
 }
 
+func TestWorker_reconcileActiveProbes_EmptyList(t *testing.T) {
+	// API returns an empty probe list — reconcileActiveProbes should exit cleanly
+	// without entering the per-probe loop.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"probes":[]}`))
+	}))
+	defer server.Close()
+
+	cfg := &Config{
+		PollingInterval: 30 * time.Second,
+		GracefulTimeout: 30 * time.Second,
+		APIURLs:         []string{server.URL + "/api/metrics/v1/test/probes"},
+		LabelSelector:   "test=true",
+		Blackbox: k8s.BlackboxConfig{
+			Probing: k8s.BlackboxProbingConfig{
+				Interval:  "30s",
+				Module:    "http_2xx",
+				ProberURL: "synthetics-blackbox-prober-default-service:9115",
+			},
+		},
+	}
+
+	worker, err := NewWorker(cfg)
+	if err != nil {
+		t.Fatalf("unexpected error creating worker: %v", err)
+	}
+
+	shutdownChan := make(chan struct{})
+	defer close(shutdownChan)
+
+	if err = worker.reconcileActiveProbes(context.Background(), shutdownChan); err != nil {
+		t.Errorf("reconcileActiveProbes() should return nil for empty probe list, got: %v", err)
+	}
+}
+
+func TestWorker_reconcileActiveProbes_ProbeErrors_Swallowed(t *testing.T) {
+	// API returns probes but the agent is not in a K8s cluster, so CreateProbeK8sResource
+	// errors. reconcileActiveProbes must swallow per-probe errors and still return nil
+	// (the caller retries on the next tick; individual failures must not abort the loop).
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"probes":[{"id":"p1","static_url":"https://example.com","status":"active","labels":{"cluster-id":"c1"}}]}`))
+	}))
+	defer server.Close()
+
+	cfg := &Config{
+		PollingInterval: 30 * time.Second,
+		GracefulTimeout: 30 * time.Second,
+		APIURLs:         []string{server.URL + "/api/metrics/v1/test/probes"},
+		LabelSelector:   "test=true",
+		Blackbox: k8s.BlackboxConfig{
+			Probing: k8s.BlackboxProbingConfig{
+				Interval:  "30s",
+				Module:    "http_2xx",
+				ProberURL: "synthetics-blackbox-prober-default-service:9115",
+			},
+		},
+	}
+
+	worker, err := NewWorker(cfg)
+	if err != nil {
+		t.Fatalf("unexpected error creating worker: %v", err)
+	}
+
+	shutdownChan := make(chan struct{})
+	defer close(shutdownChan)
+
+	// Not running in a K8s cluster, so CreateProbeK8sResource will error.
+	// reconcileActiveProbes must swallow the error and return nil.
+	if err = worker.reconcileActiveProbes(context.Background(), shutdownChan); err != nil {
+		t.Errorf("reconcileActiveProbes() must not propagate per-probe errors, got: %v", err)
+	}
+}
+
 func TestNewWorker_EdgeCases(t *testing.T) {
 	// Test with config containing empty URL in the slice
 	cfg := &Config{

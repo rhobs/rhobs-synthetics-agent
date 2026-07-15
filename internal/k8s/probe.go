@@ -20,6 +20,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/dynamic"
 )
 
 // ProbeManager handles the creation and management of probe Custom Resources
@@ -27,7 +28,8 @@ type ProbeManager struct {
 	namespace     string
 	httpClient    *http.Client
 	kubeClient    *kubeclient.Client
-	probeAPIGroup string // "monitoring.rhobs" or "monitoring.coreos.com" or ""
+	dynamicClient dynamic.Interface // extracted from kubeClient; settable in tests
+	probeAPIGroup string            // "monitoring.rhobs" or "monitoring.coreos.com" or ""
 }
 
 // NewProbeManager creates a new probe manager.
@@ -88,13 +90,14 @@ func (pm *ProbeManager) initializeK8sClients(kubeconfigPath string) {
 	}
 
 	pm.kubeClient = client
+	pm.dynamicClient = client.DynamicClient()
 
 	// Check if Probe CRD exists
 	pm.checkProbeCRDs()
 }
 
 func (pm *ProbeManager) isK8sCluster() bool {
-	return pm.kubeClient != nil
+	return pm.dynamicClient != nil
 }
 
 // checkProbeCRDs checks if Probe CRDs exist in the cluster.
@@ -160,7 +163,7 @@ func (pm *ProbeManager) CreateProbeK8sResource(probe api.Probe, config BlackboxP
 		return fmt.Errorf("no compatible Probe CRDs found in cluster")
 	}
 
-	if pm.kubeClient == nil {
+	if pm.dynamicClient == nil {
 		return fmt.Errorf("kubernetes client not available")
 	}
 
@@ -193,7 +196,7 @@ func (pm *ProbeManager) CreateProbeK8sResource(probe api.Probe, config BlackboxP
 	defer cancel()
 
 	// Try to create the resource in Kubernetes
-	_, err = pm.kubeClient.DynamicClient().Resource(probeGVR).Namespace(pm.namespace).Create(
+	_, err = pm.dynamicClient.Resource(probeGVR).Namespace(pm.namespace).Create(
 		ctx,
 		unstructuredCR,
 		metav1.CreateOptions{},
@@ -217,7 +220,7 @@ func (pm *ProbeManager) updateProbeK8sResource(ctx context.Context, probeGVR sch
 	probeName := desired.GetName()
 
 	// Get the existing resource to preserve resourceVersion
-	existing, err := pm.kubeClient.DynamicClient().Resource(probeGVR).Namespace(pm.namespace).Get(
+	existing, err := pm.dynamicClient.Resource(probeGVR).Namespace(pm.namespace).Get(
 		ctx,
 		probeName,
 		metav1.GetOptions{},
@@ -249,7 +252,7 @@ func (pm *ProbeManager) updateProbeK8sResource(ctx context.Context, probeGVR sch
 	desired.SetResourceVersion(existing.GetResourceVersion())
 
 	// Update the resource
-	_, err = pm.kubeClient.DynamicClient().Resource(probeGVR).Namespace(pm.namespace).Update(
+	_, err = pm.dynamicClient.Resource(probeGVR).Namespace(pm.namespace).Update(
 		ctx,
 		desired,
 		metav1.UpdateOptions{},
@@ -276,7 +279,7 @@ func (pm *ProbeManager) DeleteProbeK8sResource(probe api.Probe) error {
 		return nil
 	}
 
-	if pm.kubeClient == nil {
+	if pm.dynamicClient == nil {
 		return fmt.Errorf("kubernetes client not available")
 	}
 
@@ -303,7 +306,7 @@ func (pm *ProbeManager) DeleteProbeK8sResource(probe api.Probe) error {
 		probeName, pm.namespace, pm.probeAPIGroup)
 
 	// Delete the resource from Kubernetes
-	err := pm.kubeClient.DynamicClient().Resource(probeGVR).Namespace(pm.namespace).Delete(
+	err := pm.dynamicClient.Resource(probeGVR).Namespace(pm.namespace).Delete(
 		ctx,
 		probeName,
 		metav1.DeleteOptions{},
@@ -324,7 +327,7 @@ func (pm *ProbeManager) DeleteProbeK8sResource(probe api.Probe) error {
 
 // ListManagedProbeCRNames returns the names of all Probe CRs managed by this agent.
 func (pm *ProbeManager) ListManagedProbeCRNames() ([]string, error) {
-	if !pm.isK8sCluster() || pm.probeAPIGroup == "" || pm.kubeClient == nil {
+	if !pm.isK8sCluster() || pm.probeAPIGroup == "" || pm.dynamicClient == nil {
 		return nil, nil
 	}
 
@@ -337,7 +340,7 @@ func (pm *ProbeManager) ListManagedProbeCRNames() ([]string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	list, err := pm.kubeClient.DynamicClient().Resource(probeGVR).Namespace(pm.namespace).List(
+	list, err := pm.dynamicClient.Resource(probeGVR).Namespace(pm.namespace).List(
 		ctx,
 		metav1.ListOptions{
 			LabelSelector: fmt.Sprintf("%s=%s", "rhobs.monitoring/managed-by", SyntheticsAgentManagedByValue),
