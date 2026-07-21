@@ -44,7 +44,7 @@ e() { ocm backplane elevate "$ELEVATE_REASON" -- "$@" 2>/dev/null; }
 get_metric() {
   local decision="$1"
   e exec -n "$NAMESPACE" deployment/"$AGENT_DEPLOYMENT" -- \
-    sh -c "curl -s http://localhost:8080/metrics \
+    sh -c "curl -s --max-time 10 http://localhost:8080/metrics \
            | grep 'probe_update_decisions_total{decision=\"${decision}\"}' \
            | awk '{print \$2}'" 2>/dev/null || echo "0"
 }
@@ -144,7 +144,6 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: mock-api-script
-  namespace: rhobs-synthetics-int
 data:
   server.py: |
     from http.server import HTTPServer, BaseHTTPRequestHandler
@@ -186,7 +185,6 @@ apiVersion: v1
 kind: Pod
 metadata:
   name: mock-synthetics-api
-  namespace: rhobs-synthetics-int
   labels:
     app: mock-synthetics-api
 spec:
@@ -208,7 +206,6 @@ apiVersion: v1
 kind: Service
 metadata:
   name: mock-synthetics-api
-  namespace: rhobs-synthetics-int
 spec:
   selector:
     app: mock-synthetics-api
