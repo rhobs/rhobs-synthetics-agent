@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"reflect"
 	"time"
 
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
@@ -19,6 +20,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/dynamic"
 )
 
 // ProbeManager handles the creation and management of probe Custom Resources
@@ -26,7 +28,8 @@ type ProbeManager struct {
 	namespace     string
 	httpClient    *http.Client
 	kubeClient    *kubeclient.Client
-	probeAPIGroup string // "monitoring.rhobs" or "monitoring.coreos.com" or ""
+	dynamicClient dynamic.Interface // extracted from kubeClient; settable in tests
+	probeAPIGroup string            // "monitoring.rhobs" or "monitoring.coreos.com" or ""
 }
 
 // NewProbeManager creates a new probe manager.
@@ -87,13 +90,14 @@ func (pm *ProbeManager) initializeK8sClients(kubeconfigPath string) {
 	}
 
 	pm.kubeClient = client
+	pm.dynamicClient = client.DynamicClient()
 
 	// Check if Probe CRD exists
 	pm.checkProbeCRDs()
 }
 
 func (pm *ProbeManager) isK8sCluster() bool {
-	return pm.kubeClient != nil
+	return pm.dynamicClient != nil
 }
 
 // checkProbeCRDs checks if Probe CRDs exist in the cluster.
@@ -159,7 +163,7 @@ func (pm *ProbeManager) CreateProbeK8sResource(probe api.Probe, config BlackboxP
 		return fmt.Errorf("no compatible Probe CRDs found in cluster")
 	}
 
-	if pm.kubeClient == nil {
+	if pm.dynamicClient == nil {
 		return fmt.Errorf("kubernetes client not available")
 	}
 
@@ -192,7 +196,7 @@ func (pm *ProbeManager) CreateProbeK8sResource(probe api.Probe, config BlackboxP
 	defer cancel()
 
 	// Try to create the resource in Kubernetes
-	_, err = pm.kubeClient.DynamicClient().Resource(probeGVR).Namespace(pm.namespace).Create(
+	_, err = pm.dynamicClient.Resource(probeGVR).Namespace(pm.namespace).Create(
 		ctx,
 		unstructuredCR,
 		metav1.CreateOptions{},
@@ -209,12 +213,14 @@ func (pm *ProbeManager) CreateProbeK8sResource(probe api.Probe, config BlackboxP
 	return nil
 }
 
-// updateProbeK8sResource updates an existing Probe Custom Resource in Kubernetes
+// updateProbeK8sResource updates an existing Probe Custom Resource in Kubernetes.
+// It compares the desired spec against the existing one and skips the Update call
+// when they are identical, preventing unnecessary Prometheus config reloads.
 func (pm *ProbeManager) updateProbeK8sResource(ctx context.Context, probeGVR schema.GroupVersionResource, desired *unstructured.Unstructured) error {
 	probeName := desired.GetName()
 
 	// Get the existing resource to preserve resourceVersion
-	existing, err := pm.kubeClient.DynamicClient().Resource(probeGVR).Namespace(pm.namespace).Get(
+	existing, err := pm.dynamicClient.Resource(probeGVR).Namespace(pm.namespace).Get(
 		ctx,
 		probeName,
 		metav1.GetOptions{},
@@ -223,11 +229,30 @@ func (pm *ProbeManager) updateProbeK8sResource(ctx context.Context, probeGVR sch
 		return fmt.Errorf("failed to get existing Probe resource %s: %w", probeName, err)
 	}
 
+	// Skip the update when the spec is unchanged to avoid triggering unnecessary
+	// Prometheus config reloads (ROSAENG-59408). Compare via typed structs so that
+	// Kubernetes normalisation (zero-value fields, nil vs empty slices) doesn't
+	// create spurious diffs between the raw unstructured maps.
+	existingTyped := &monitoringv1.Probe{}
+	desiredTyped := &monitoringv1.Probe{}
+	errExisting := convertFromUnstructured(existing, existingTyped)
+	errDesired := convertFromUnstructured(desired, desiredTyped)
+	if errExisting != nil {
+		logger.Debugf("spec comparison skipped for %s: could not convert existing CR: %v", probeName, errExisting)
+	} else if errDesired != nil {
+		logger.Debugf("spec comparison skipped for %s: could not convert desired CR: %v", probeName, errDesired)
+	} else if reflect.DeepEqual(existingTyped.Spec, desiredTyped.Spec) {
+		metrics.RecordProbeUpdateDecision("skipped")
+		return nil
+	} else {
+		logger.Debugf("probe %s spec changed, applying update", probeName)
+	}
+
 	// Set the resourceVersion from the existing resource (required for update)
 	desired.SetResourceVersion(existing.GetResourceVersion())
 
 	// Update the resource
-	_, err = pm.kubeClient.DynamicClient().Resource(probeGVR).Namespace(pm.namespace).Update(
+	_, err = pm.dynamicClient.Resource(probeGVR).Namespace(pm.namespace).Update(
 		ctx,
 		desired,
 		metav1.UpdateOptions{},
@@ -236,6 +261,7 @@ func (pm *ProbeManager) updateProbeK8sResource(ctx context.Context, probeGVR sch
 		return fmt.Errorf("failed to update Probe resource %s in Kubernetes: %w", probeName, err)
 	}
 
+	metrics.RecordProbeUpdateDecision("applied")
 	logger.Infof("Updated existing Probe resource %s", probeName)
 	return nil
 }
@@ -253,7 +279,7 @@ func (pm *ProbeManager) DeleteProbeK8sResource(probe api.Probe) error {
 		return nil
 	}
 
-	if pm.kubeClient == nil {
+	if pm.dynamicClient == nil {
 		return fmt.Errorf("kubernetes client not available")
 	}
 
@@ -280,7 +306,7 @@ func (pm *ProbeManager) DeleteProbeK8sResource(probe api.Probe) error {
 		probeName, pm.namespace, pm.probeAPIGroup)
 
 	// Delete the resource from Kubernetes
-	err := pm.kubeClient.DynamicClient().Resource(probeGVR).Namespace(pm.namespace).Delete(
+	err := pm.dynamicClient.Resource(probeGVR).Namespace(pm.namespace).Delete(
 		ctx,
 		probeName,
 		metav1.DeleteOptions{},
@@ -301,7 +327,7 @@ func (pm *ProbeManager) DeleteProbeK8sResource(probe api.Probe) error {
 
 // ListManagedProbeCRNames returns the names of all Probe CRs managed by this agent.
 func (pm *ProbeManager) ListManagedProbeCRNames() ([]string, error) {
-	if !pm.isK8sCluster() || pm.probeAPIGroup == "" || pm.kubeClient == nil {
+	if !pm.isK8sCluster() || pm.probeAPIGroup == "" || pm.dynamicClient == nil {
 		return nil, nil
 	}
 
@@ -314,7 +340,7 @@ func (pm *ProbeManager) ListManagedProbeCRNames() ([]string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	list, err := pm.kubeClient.DynamicClient().Resource(probeGVR).Namespace(pm.namespace).List(
+	list, err := pm.dynamicClient.Resource(probeGVR).Namespace(pm.namespace).List(
 		ctx,
 		metav1.ListOptions{
 			LabelSelector: fmt.Sprintf("%s=%s", "rhobs.monitoring/managed-by", SyntheticsAgentManagedByValue),
@@ -367,9 +393,12 @@ func (pm *ProbeManager) CreateProbeResource(probe api.Probe, config BlackboxProb
 		"rhobs.monitoring/managed-by": SyntheticsAgentManagedByValue,
 	}
 
-	// Create target labels starting with basic probe information
+	// Create target labels starting with basic probe information.
+	// probe_url is required so probe_success metrics match the alert rule selector
+	// probe_success{probe_url=~".*api.*"} used by api-ErrorBudgetBurn (ROSAENG-60340).
 	targetLabels := map[string]string{
 		"apiserver_url": probe.StaticURL,
+		"probe_url":     probe.StaticURL,
 	}
 
 	// Add all probe labels to both metadata and target labels generically
@@ -380,7 +409,13 @@ func (pm *ProbeManager) CreateProbeResource(probe api.Probe, config BlackboxProb
 			metadataLabels[metadataKey] = value
 		}
 
-		// Add all labels to target labels as-is
+		// Exclude last-reconciled from metric labels. It changes on every RMO
+		// reconciliation cycle, creating a new Prometheus time series each time.
+		// This breaks burn rate window continuity and for: timer stability in alerts.
+		if key == "last-reconciled" {
+			continue
+		}
+
 		targetLabels[key] = value
 	}
 
@@ -418,7 +453,8 @@ func (pm *ProbeManager) CreateProbeResource(probe api.Probe, config BlackboxProb
 			Interval:      scrapeIntervalForProbe(probe, config),
 			ScrapeTimeout: scrapeTimeoutForProbe(probe, config),
 			ProberSpec: monitoringv1.ProberSpec{
-				URL: config.ProberURL,
+				URL:  config.ProberURL,
+				Path: "/probe",
 			},
 			Targets: monitoringv1.ProbeTargets{
 				StaticConfig: &monitoringv1.ProbeTargetStaticConfig{

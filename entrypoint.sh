@@ -5,7 +5,7 @@ ARGS="start"
 
 # Check if APP_ENV is set to "dev"
 if [ "$APP_ENV" = "dev" ]; then
-  # TODO: Add dev-specific arguments
+  : # TODO: Add dev-specific arguments
 fi
 
 # Execute the main application with the determined arguments
