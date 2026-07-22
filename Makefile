@@ -26,6 +26,11 @@ build:
 	@go build -o $(BINARY_NAME) $(MAIN_PACKAGE)
 	@echo "$(BINARY_NAME) built successfully."
 
+build-mock-api:
+	@echo "Building mock-api..."
+	@go build -o mock-api ./cmd/mock-api
+	@echo "mock-api built successfully."
+
 # Golangci-lint setup similar to API project
 GOLANGCI_LINT_VERSION ?= v2.12.2
 GOLANGCI_LINT_BIN := $(shell go env GOPATH)/bin/golangci-lint
