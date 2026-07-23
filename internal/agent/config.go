@@ -35,6 +35,9 @@ type Config struct {
 
 	// Blackbox Configuration
 	Blackbox k8s.BlackboxConfig `mapstructure:"blackbox"`
+
+	// Metrics server address (default ":8080")
+	MetricsAddr string `mapstructure:"metrics_addr"`
 }
 
 const (
@@ -141,6 +144,7 @@ func LoadConfig() (*Config, error) {
 	viper.SetDefault("oidc_issuer_url", "")
 	viper.SetDefault("kube_config", "")
 	viper.SetDefault("namespace", "default")
+	viper.SetDefault("metrics_addr", ":8080")
 
 	k8s.LoadBlackboxDefaults()
 

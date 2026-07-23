@@ -13,12 +13,26 @@ import (
 	"github.com/rhobs/rhobs-synthetics-agent/internal/k8s"
 )
 
+// newMockProber returns an httptest.Server that simulates a blackbox exporter.
+func newMockProber(success bool) *httptest.Server {
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		val := "0"
+		if success {
+			val = "1"
+		}
+		_, _ = w.Write([]byte("probe_success " + val + "\n"))
+	}))
+}
+
 func TestWorker_processProbe_Success(t *testing.T) {
 	// Create a mock server for URL validation
 	validationServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer validationServer.Close()
+
+	mockProber := newMockProber(true)
+	defer mockProber.Close()
 
 	cfg := &Config{
 		APIURLs:       []string{"http://example.com/api/metrics/v1/test/probes"},
@@ -28,7 +42,7 @@ func TestWorker_processProbe_Success(t *testing.T) {
 			Probing: k8s.BlackboxProbingConfig{
 				Interval:  "30s",
 				Module:    "http_2xx",
-				ProberURL: "synthetics-blackbox-prober-default-service:9115",
+				ProberURL: mockProber.Listener.Addr().String(),
 			},
 		},
 	}
@@ -57,6 +71,9 @@ func TestWorker_processProbe_Success(t *testing.T) {
 }
 
 func TestWorker_processProbe_ValidationFailure(t *testing.T) {
+	mockProber := newMockProber(true)
+	defer mockProber.Close()
+
 	cfg := &Config{
 		APIURLs:       []string{"http://example.com/api/metrics/v1/test/probes"},
 		LabelSelector: "test=true",
@@ -65,7 +82,7 @@ func TestWorker_processProbe_ValidationFailure(t *testing.T) {
 			Probing: k8s.BlackboxProbingConfig{
 				Interval:  "30s",
 				Module:    "http_2xx",
-				ProberURL: "synthetics-blackbox-prober-default-service:9115",
+				ProberURL: mockProber.Listener.Addr().String(),
 			},
 		},
 	}
@@ -99,6 +116,9 @@ func TestWorker_FullIntegration(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer validationServer.Close()
+
+	mockProber := newMockProber(true)
+	defer mockProber.Close()
 
 	// Create a mock API server
 	var updateCalls []string
@@ -140,7 +160,7 @@ func TestWorker_FullIntegration(t *testing.T) {
 			Probing: k8s.BlackboxProbingConfig{
 				Interval:  "30s",
 				Module:    "http_2xx",
-				ProberURL: "synthetics-blackbox-prober-default-service:9115",
+				ProberURL: mockProber.Listener.Addr().String(),
 			},
 		},
 	}

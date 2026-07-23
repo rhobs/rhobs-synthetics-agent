@@ -19,23 +19,21 @@ func TestAgent_E2E_Metrics(t *testing.T) {
 	mockAPI := NewMockAPIServer()
 	defer mockAPI.Close()
 
-	// Create agent configuration
 	cfg := &agent.Config{
 		LogLevel:        "info",
 		LogFormat:       "json",
 		PollingInterval: 2 * time.Second,
 		GracefulTimeout: 5 * time.Second,
+		MetricsAddr:     ":0",
 		APIURLs:         []string{mockAPI.URL + "/probes"},
 		LabelSelector:   "env=test",
 	}
 
-	// Create and start agent
 	testAgent, err := agent.New(cfg)
 	if err != nil {
 		t.Fatalf("failed to start test agent: %v", err)
 	}
 
-	// Run agent in background
 	var agentErr error
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -45,11 +43,11 @@ func TestAgent_E2E_Metrics(t *testing.T) {
 		agentErr = testAgent.Run()
 	}()
 
-	// Wait for agent to start and perform initial reconciliation
+	metricsAddr := testAgent.MetricsAddr()
 	time.Sleep(4 * time.Second)
 
 	t.Run("MetricsEndpointAccessible", func(t *testing.T) {
-		resp, err := http.Get("http://localhost:8080/metrics")
+		resp, err := http.Get("http://"+metricsAddr+"/metrics")
 		if err != nil {
 			t.Fatalf("Failed to access metrics endpoint: %v", err)
 		}
@@ -70,7 +68,7 @@ func TestAgent_E2E_Metrics(t *testing.T) {
 	})
 
 	t.Run("PrometheusFormatValidation", func(t *testing.T) {
-		resp, err := http.Get("http://localhost:8080/metrics")
+		resp, err := http.Get("http://"+metricsAddr+"/metrics")
 		if err != nil {
 			t.Fatalf("Failed to access metrics endpoint: %v", err)
 		}
@@ -111,7 +109,7 @@ func TestAgent_E2E_Metrics(t *testing.T) {
 	})
 
 	t.Run("CustomMetricsPresent", func(t *testing.T) {
-		resp, err := http.Get("http://localhost:8080/metrics")
+		resp, err := http.Get("http://"+metricsAddr+"/metrics")
 		if err != nil {
 			t.Fatalf("Failed to access metrics endpoint: %v", err)
 		}
@@ -159,7 +157,7 @@ func TestAgent_E2E_Metrics(t *testing.T) {
 	})
 
 	t.Run("MetricLabelsValidation", func(t *testing.T) {
-		resp, err := http.Get("http://localhost:8080/metrics")
+		resp, err := http.Get("http://"+metricsAddr+"/metrics")
 		if err != nil {
 			t.Fatalf("Failed to access metrics endpoint: %v", err)
 		}
@@ -196,7 +194,7 @@ func TestAgent_E2E_Metrics(t *testing.T) {
 	})
 
 	t.Run("MetricValuesReasonable", func(t *testing.T) {
-		resp, err := http.Get("http://localhost:8080/metrics")
+		resp, err := http.Get("http://"+metricsAddr+"/metrics")
 		if err != nil {
 			t.Fatalf("Failed to access metrics endpoint: %v", err)
 		}
@@ -271,13 +269,13 @@ func TestAgent_E2E_Metrics(t *testing.T) {
 }
 
 func TestAgent_E2E_MetricsWithAPIFailure(t *testing.T) {
-	// Test metrics when API is unavailable
 	cfg := &agent.Config{
 		LogLevel:        "info",
 		LogFormat:       "json",
 		PollingInterval: 1 * time.Second,
 		GracefulTimeout: 3 * time.Second,
-		APIURLs:         []string{"http://localhost:9999/probes"}, // Non-existent server
+		MetricsAddr:     ":0",
+		APIURLs:         []string{"http://localhost:9999/probes"},
 		LabelSelector:   "env=test",
 	}
 
@@ -294,11 +292,11 @@ func TestAgent_E2E_MetricsWithAPIFailure(t *testing.T) {
 		_ = testAgent.Run()
 	}()
 
-	// Let it run and attempt API calls
+	metricsAddr := testAgent.MetricsAddr()
 	time.Sleep(3 * time.Second)
 
 	t.Run("MetricsWithAPIFailure", func(t *testing.T) {
-		resp, err := http.Get("http://localhost:8080/metrics")
+		resp, err := http.Get("http://"+metricsAddr+"/metrics")
 		if err != nil {
 			t.Fatalf("Failed to access metrics endpoint: %v", err)
 		}
@@ -346,13 +344,13 @@ func TestAgent_E2E_MetricsWithAPIFailure(t *testing.T) {
 }
 
 func TestAgent_E2E_MetricsStandaloneMode(t *testing.T) {
-	// Test metrics when running in standalone mode (no API URLs configured)
 	cfg := &agent.Config{
 		LogLevel:        "info",
 		LogFormat:       "json",
 		PollingInterval: 1 * time.Second,
 		GracefulTimeout: 2 * time.Second,
-		APIURLs:         []string{}, // No API URLs - standalone mode
+		MetricsAddr:     ":0",
+		APIURLs:         []string{},
 	}
 
 	testAgent, err := agent.New(cfg)
@@ -368,11 +366,11 @@ func TestAgent_E2E_MetricsStandaloneMode(t *testing.T) {
 		_ = testAgent.Run()
 	}()
 
-	// Let it run in standalone mode
+	metricsAddr := testAgent.MetricsAddr()
 	time.Sleep(3 * time.Second)
 
 	t.Run("MetricsInStandaloneMode", func(t *testing.T) {
-		resp, err := http.Get("http://localhost:8080/metrics")
+		resp, err := http.Get("http://"+metricsAddr+"/metrics")
 		if err != nil {
 			t.Fatalf("Failed to access metrics endpoint: %v", err)
 		}

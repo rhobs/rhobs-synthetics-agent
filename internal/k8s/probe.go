@@ -1,11 +1,13 @@
 package k8s
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"net/http"
 	"net/url"
 	"reflect"
+	"strings"
 	"time"
 
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
@@ -69,6 +71,51 @@ func (pm *ProbeManager) ValidateURL(targetURL string) error {
 	}
 
 	return nil
+}
+
+// CheckConnectivity verifies that the target URL is reachable through the
+// blackbox exporter before creating a Probe CR. This prevents generating
+// probe_success=0 data during the warm-up period when connectivity to
+// the API server isn't established yet, which would otherwise burn the
+// API SLO error budget and cause false alerts.
+func (pm *ProbeManager) CheckConnectivity(ctx context.Context, targetURL string, config BlackboxProbingConfig) bool {
+	if config.ProberURL == "" {
+		logger.Debugf("No prober URL configured, skipping pre-flight check")
+		return true
+	}
+
+	probeURL := fmt.Sprintf("http://%s/probe?target=%s&module=%s",
+		config.ProberURL,
+		url.QueryEscape(targetURL),
+		url.QueryEscape(config.Module))
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, probeURL, nil)
+	if err != nil {
+		logger.Debugf("Pre-flight check failed to build request for %s: %v", targetURL, err)
+		return false
+	}
+
+	resp, err := pm.httpClient.Do(req)
+	if err != nil {
+		logger.Debugf("Pre-flight check failed for %s: %v", targetURL, err)
+		return false
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode/100 != 2 {
+		logger.Debugf("Pre-flight check got non-2xx status %d for %s", resp.StatusCode, targetURL)
+		return false
+	}
+
+	scanner := bufio.NewScanner(resp.Body)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(line, "probe_success ") {
+			return strings.TrimPrefix(line, "probe_success ") == "1"
+		}
+	}
+
+	return false
 }
 
 // initializeK8sClients sets up Kubernetes clients and checks cluster capabilities

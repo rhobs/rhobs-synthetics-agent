@@ -424,6 +424,123 @@ func TestProbeManager_updateProbeK8sResource(t *testing.T) {
 	})
 }
 
+func TestProbeManager_CheckConnectivity(t *testing.T) {
+	t.Run("returns true when blackbox exporter reports probe_success 1", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, _ = w.Write([]byte("# HELP probe_success Displays whether or not the probe was a success\n# TYPE probe_success gauge\nprobe_success 1\n"))
+		}))
+		defer server.Close()
+
+		pm := newTestProbeManager("test-ns", "monitoring.rhobs", nil)
+		config := BlackboxProbingConfig{
+			ProberURL: strings.TrimPrefix(server.URL, "http://"),
+			Module:    "http_2xx",
+		}
+
+		if !pm.CheckConnectivity(context.Background(), "https://api.example.com/livez", config) {
+			t.Error("expected true for probe_success 1")
+		}
+	})
+
+	t.Run("returns false when blackbox exporter reports probe_success 0", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, _ = w.Write([]byte("# HELP probe_success Displays whether or not the probe was a success\n# TYPE probe_success gauge\nprobe_success 0\n"))
+		}))
+		defer server.Close()
+
+		pm := newTestProbeManager("test-ns", "monitoring.rhobs", nil)
+		config := BlackboxProbingConfig{
+			ProberURL: strings.TrimPrefix(server.URL, "http://"),
+			Module:    "http_2xx",
+		}
+
+		if pm.CheckConnectivity(context.Background(), "https://api.example.com/livez", config) {
+			t.Error("expected false for probe_success 0")
+		}
+	})
+
+	t.Run("returns false when blackbox exporter is unreachable", func(t *testing.T) {
+		pm := newTestProbeManager("test-ns", "monitoring.rhobs", nil)
+		config := BlackboxProbingConfig{
+			ProberURL: "127.0.0.1:1",
+			Module:    "http_2xx",
+		}
+
+		if pm.CheckConnectivity(context.Background(), "https://api.example.com/livez", config) {
+			t.Error("expected false when prober is unreachable")
+		}
+	})
+
+	t.Run("returns true when no prober URL configured", func(t *testing.T) {
+		pm := newTestProbeManager("test-ns", "monitoring.rhobs", nil)
+		config := BlackboxProbingConfig{Module: "http_2xx"}
+
+		if !pm.CheckConnectivity(context.Background(), "https://api.example.com/livez", config) {
+			t.Error("expected true when prober URL is empty (skip pre-flight)")
+		}
+	})
+
+	t.Run("returns false when response has no probe_success line", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, _ = w.Write([]byte("# some other metrics\nprobe_duration_seconds 0.5\n"))
+		}))
+		defer server.Close()
+
+		pm := newTestProbeManager("test-ns", "monitoring.rhobs", nil)
+		config := BlackboxProbingConfig{
+			ProberURL: strings.TrimPrefix(server.URL, "http://"),
+			Module:    "http_2xx",
+		}
+
+		if pm.CheckConnectivity(context.Background(), "https://api.example.com/livez", config) {
+			t.Error("expected false when probe_success metric is missing")
+		}
+	})
+
+	t.Run("returns false on non-2xx response even with probe_success 1", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = w.Write([]byte("probe_success 1\n"))
+		}))
+		defer server.Close()
+
+		pm := newTestProbeManager("test-ns", "monitoring.rhobs", nil)
+		config := BlackboxProbingConfig{
+			ProberURL: strings.TrimPrefix(server.URL, "http://"),
+			Module:    "http_2xx",
+		}
+
+		if pm.CheckConnectivity(context.Background(), "https://api.example.com/livez", config) {
+			t.Error("expected false when blackbox exporter returns non-2xx status")
+		}
+	})
+
+	t.Run("passes correct target and module query params", func(t *testing.T) {
+		var capturedTarget, capturedModule string
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			capturedTarget = r.URL.Query().Get("target")
+			capturedModule = r.URL.Query().Get("module")
+			_, _ = w.Write([]byte("probe_success 1\n"))
+		}))
+		defer server.Close()
+
+		pm := newTestProbeManager("test-ns", "monitoring.rhobs", nil)
+		config := BlackboxProbingConfig{
+			ProberURL: strings.TrimPrefix(server.URL, "http://"),
+			Module:    "http_2xx",
+		}
+
+		pm.CheckConnectivity(context.Background(), "https://api.test.com:6443/livez", config)
+
+		if capturedTarget != "https://api.test.com:6443/livez" {
+			t.Errorf("expected target 'https://api.test.com:6443/livez', got %q", capturedTarget)
+		}
+		if capturedModule != "http_2xx" {
+			t.Errorf("expected module 'http_2xx', got %q", capturedModule)
+		}
+	})
+}
+
 // Compile-time assertion: monitoringv1 is imported for convertFromUnstructured coverage.
 var _ = monitoringv1.Probe{}
 var _ = metav1.GetOptions{}

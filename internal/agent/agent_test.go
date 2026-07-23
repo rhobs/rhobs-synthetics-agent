@@ -116,6 +116,7 @@ func TestAgent_startHealthServer(t *testing.T) {
 		LogFormat:       "json",
 		PollingInterval: 30 * time.Second,
 		GracefulTimeout: 30 * time.Second,
+		MetricsAddr:     ":0",
 	}
 
 	agent, err := New(cfg)

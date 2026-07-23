@@ -8,6 +8,7 @@ import (
 
 	"github.com/rhobs/rhobs-synthetics-agent/internal/agent"
 	"github.com/rhobs/rhobs-synthetics-agent/internal/api"
+	"github.com/rhobs/rhobs-synthetics-agent/internal/k8s"
 )
 
 func TestAgent_E2E_WithAPI(t *testing.T) {
@@ -21,6 +22,7 @@ func TestAgent_E2E_WithAPI(t *testing.T) {
 		LogFormat:       "text",
 		PollingInterval: 1 * time.Second,
 		GracefulTimeout: 2 * time.Second,
+		MetricsAddr:     ":0",
 		APIURLs:         []string{mockAPI.URL + "/probes"},
 		LabelSelector:   "env=test,private=false",
 	}
@@ -169,6 +171,7 @@ func TestAgent_E2E_ErrorHandling(t *testing.T) {
 			LogFormat:       "text", 
 			PollingInterval: 1 * time.Second,
 			GracefulTimeout: 2 * time.Second,
+		MetricsAddr:     ":0",
 			APIURLs:          []string{"http://localhost:9999/probes"}, // Non-existent server
 			LabelSelector:   "env=test",
 		}
@@ -226,6 +229,7 @@ func TestAgent_E2E_ConfigurationVariations(t *testing.T) {
 				LogFormat:       "json",
 				PollingInterval: 1 * time.Second,
 				GracefulTimeout: 2 * time.Second,
+		MetricsAddr:     ":0",
 				APIURLs:         []string{mockAPI.URL + "/probes"},
 				LabelSelector:   "", // No selector - should get all probes
 			},
@@ -238,6 +242,7 @@ func TestAgent_E2E_ConfigurationVariations(t *testing.T) {
 				LogFormat:       "json",
 				PollingInterval: 1 * time.Second,
 				GracefulTimeout: 2 * time.Second,
+		MetricsAddr:     ":0",
 				APIURLs:         []string{mockAPI.URL + "/probes"},
 				LabelSelector:   "env=test,private=false,nonexistent=value",
 			},
@@ -291,6 +296,78 @@ func TestAgent_E2E_ConfigurationVariations(t *testing.T) {
 				t.Fatal("Agent did not shut down within timeout")
 			}
 		})
+	}
+}
+
+func TestAgent_E2E_PreflightBlocksUntilConnectivity(t *testing.T) {
+	mockAPI := NewMockAPIServer()
+	defer mockAPI.Close()
+
+	mockProber := NewMockBlackboxExporter(false)
+	defer mockProber.Close()
+
+	cfg := &agent.Config{
+		LogLevel:        "debug",
+		LogFormat:       "text",
+		PollingInterval: 500 * time.Millisecond,
+		GracefulTimeout: 2 * time.Second,
+		MetricsAddr:     ":0",
+		APIURLs:         []string{mockAPI.URL + "/probes"},
+		LabelSelector:   "env=test,private=false",
+		Blackbox: k8s.BlackboxConfig{
+			Probing: k8s.BlackboxProbingConfig{
+				Module:    "http_2xx",
+				ProberURL: mockProber.Addr(),
+			},
+		},
+	}
+
+	testAgent, err := agent.New(cfg)
+	if err != nil {
+		t.Fatalf("failed to create agent: %v", err)
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		_ = testAgent.Run()
+	}()
+
+	// Let agent run a few cycles with pre-flight failing
+	time.Sleep(2 * time.Second)
+
+	// Probes should still be pending
+	probe1 := mockAPI.GetProbe("test-probe-1")
+	if probe1 == nil {
+		t.Fatal("expected test-probe-1 to exist")
+	}
+	if probe1.Status != "pending" {
+		t.Errorf("expected probe to stay pending when pre-flight fails, got %q", probe1.Status)
+	}
+
+	// Simulate connectivity established
+	mockProber.SetSuccess(true)
+
+	// Let agent run another cycle
+	time.Sleep(2 * time.Second)
+
+	// Now probes should transition to active
+	probe1 = mockAPI.GetProbe("test-probe-1")
+	if probe1.Status != "active" {
+		t.Errorf("expected probe to become active after connectivity established, got %q", probe1.Status)
+	}
+
+	testAgent.Shutdown()
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("agent did not shut down within timeout")
 	}
 }
 

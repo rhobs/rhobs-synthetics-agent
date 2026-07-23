@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -339,6 +340,12 @@ func TestWorker_ConcurrentShutdown(t *testing.T) {
 }
 
 func TestWorker_processProbe_K8sIntegration(t *testing.T) {
+	// Mock blackbox exporter that reports connectivity success
+	mockProber := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("probe_success 1\n"))
+	}))
+	defer mockProber.Close()
+
 	cfg := &Config{
 		PollingInterval: 30 * time.Second,
 		GracefulTimeout: 30 * time.Second,
@@ -347,7 +354,7 @@ func TestWorker_processProbe_K8sIntegration(t *testing.T) {
 			Probing: k8s.BlackboxProbingConfig{
 				Interval:  "30s",
 				Module:    "http_2xx",
-				ProberURL: "synthetics-blackbox-prober-default-service:9115",
+				ProberURL: mockProber.Listener.Addr().String(),
 			},
 		},
 	}
@@ -376,6 +383,12 @@ func TestWorker_processProbe_K8sIntegration(t *testing.T) {
 }
 
 func TestWorker_createProbe_FallbackLogging(t *testing.T) {
+	// Mock blackbox exporter that always reports success
+	mockProber := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("probe_success 1\n"))
+	}))
+	defer mockProber.Close()
+
 	cfg := &Config{
 		PollingInterval: 30 * time.Second,
 		GracefulTimeout: 30 * time.Second,
@@ -384,7 +397,7 @@ func TestWorker_createProbe_FallbackLogging(t *testing.T) {
 			Probing: k8s.BlackboxProbingConfig{
 				Interval:  "30s",
 				Module:    "http_2xx",
-				ProberURL: "synthetics-blackbox-prober-default-service:9115",
+				ProberURL: mockProber.Listener.Addr().String(),
 			},
 		},
 	}
@@ -405,10 +418,191 @@ func TestWorker_createProbe_FallbackLogging(t *testing.T) {
 		Status: "pending",
 	}
 
-	// This should fail because URL validation fails
+	// This should fail because URL validation fails (after pre-flight passes)
 	err = worker.createProbe(ctx, probe)
 	if err == nil {
 		t.Error("createProbe() should fail when URL validation fails")
+	}
+}
+
+func TestWorker_createProbe_PreflightFail(t *testing.T) {
+	// Mock blackbox exporter that reports probe failure (connectivity not established)
+	mockProber := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("probe_success 0\n"))
+	}))
+	defer mockProber.Close()
+
+	// Track API status updates to verify no activation happens
+	var statusUpdates []string
+	mockAPI := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "PATCH" {
+			var update api.ProbeStatusUpdate
+			_ = json.NewDecoder(r.Body).Decode(&update)
+			statusUpdates = append(statusUpdates, update.Status)
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer mockAPI.Close()
+
+	cfg := &Config{
+		PollingInterval: 30 * time.Second,
+		GracefulTimeout: 30 * time.Second,
+		Namespace:       "test-namespace",
+		APIURLs:         []string{mockAPI.URL + "/probes"},
+		Blackbox: k8s.BlackboxConfig{
+			Probing: k8s.BlackboxProbingConfig{
+				Interval:  "30s",
+				Module:    "http_2xx",
+				ProberURL: mockProber.Listener.Addr().String(),
+			},
+		},
+	}
+
+	worker, err := NewWorker(cfg)
+	if err != nil {
+		t.Fatalf("unexpected error creating worker: %v", err)
+	}
+	ctx := context.Background()
+
+	probe := api.Probe{
+		ID:        "test-probe-pending",
+		StaticURL: "https://api.test.com:6443/livez",
+		Labels: map[string]string{
+			"cluster-id": "test-cluster-id",
+		},
+		Status: "pending",
+	}
+
+	err = worker.createProbe(ctx, probe)
+	if err != nil {
+		t.Errorf("createProbe() should return nil when pre-flight fails (probe stays pending): %v", err)
+	}
+	for _, s := range statusUpdates {
+		if s == "active" {
+			t.Error("probe should not be activated when pre-flight fails")
+		}
+	}
+}
+
+func TestWorker_createProbe_PreflightProberUnreachable(t *testing.T) {
+	var statusUpdates []string
+	mockAPI := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "PATCH" {
+			var update api.ProbeStatusUpdate
+			_ = json.NewDecoder(r.Body).Decode(&update)
+			statusUpdates = append(statusUpdates, update.Status)
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer mockAPI.Close()
+
+	cfg := &Config{
+		PollingInterval: 30 * time.Second,
+		GracefulTimeout: 30 * time.Second,
+		Namespace:       "test-namespace",
+		APIURLs:         []string{mockAPI.URL + "/probes"},
+		Blackbox: k8s.BlackboxConfig{
+			Probing: k8s.BlackboxProbingConfig{
+				Interval:  "30s",
+				Module:    "http_2xx",
+				ProberURL: "127.0.0.1:1",
+			},
+		},
+	}
+
+	worker, err := NewWorker(cfg)
+	if err != nil {
+		t.Fatalf("unexpected error creating worker: %v", err)
+	}
+	ctx := context.Background()
+
+	probe := api.Probe{
+		ID:        "test-probe-no-prober",
+		StaticURL: "https://api.test.com:6443/livez",
+		Labels: map[string]string{
+			"cluster-id": "test-cluster-id",
+		},
+		Status: "pending",
+	}
+
+	err = worker.createProbe(ctx, probe)
+	if err != nil {
+		t.Errorf("createProbe() should return nil when prober is unreachable: %v", err)
+	}
+	for _, s := range statusUpdates {
+		if s == "active" {
+			t.Error("probe should not be activated when prober is unreachable")
+		}
+	}
+}
+
+func TestWorker_createProbe_PreflightTimeout(t *testing.T) {
+	mockProber := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("probe_success 0\n"))
+	}))
+	defer mockProber.Close()
+
+	var statusUpdates []string
+	mockAPI := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "PATCH" {
+			var update api.ProbeStatusUpdate
+			_ = json.NewDecoder(r.Body).Decode(&update)
+			statusUpdates = append(statusUpdates, update.Status)
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer mockAPI.Close()
+
+	cfg := &Config{
+		PollingInterval: 30 * time.Second,
+		GracefulTimeout: 30 * time.Second,
+		Namespace:       "test-namespace",
+		APIURLs:         []string{mockAPI.URL + "/probes"},
+		Blackbox: k8s.BlackboxConfig{
+			Probing: k8s.BlackboxProbingConfig{
+				Interval:  "30s",
+				Module:    "http_2xx",
+				ProberURL: mockProber.Listener.Addr().String(),
+			},
+		},
+	}
+
+	worker, err := NewWorker(cfg)
+	if err != nil {
+		t.Fatalf("unexpected error creating worker: %v", err)
+	}
+	ctx := context.Background()
+
+	probe := api.Probe{
+		ID:        "test-probe-timeout",
+		StaticURL: "https://api.test.com:6443/livez",
+		Labels:    map[string]string{"cluster-id": "test-cluster-id"},
+		Status:    "pending",
+	}
+
+	// First call: pre-flight fails, records first-seen time
+	err = worker.createProbe(ctx, probe)
+	if err != nil {
+		t.Fatalf("first call should return nil: %v", err)
+	}
+
+	// Simulate timeout by backdating the first-seen time
+	worker.preflightFirstSeen[probe.ID] = time.Now().Add(-defaultPreflightTimeout - time.Minute)
+
+	// Second call: pre-flight still fails but timeout exceeded, should proceed
+	err = worker.createProbe(ctx, probe)
+	if err != nil {
+		t.Fatalf("timed-out call should return nil: %v", err)
+	}
+
+	activated := false
+	for _, s := range statusUpdates {
+		if s == "active" {
+			activated = true
+		}
+	}
+	if !activated {
+		t.Error("probe should be activated after pre-flight timeout")
 	}
 }
 
