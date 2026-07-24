@@ -16,7 +16,15 @@ import (
 	"github.com/rhobs/rhobs-synthetics-api/pkg/kubeclient"
 )
 
-const defaultProbeNamespace = "default"
+const (
+	defaultProbeNamespace = "default"
+
+	// Maximum time a probe can stay pending due to pre-flight failures before
+	// we create the Probe CR anyway. If a cluster is up but the backplane tunnel
+	// never establishes, we still want to generate probe data so the SLO alert
+	// fires for a real connectivity issue rather than being silently suppressed.
+	defaultPreflightTimeout = 10 * time.Minute
+)
 
 type Worker struct {
 	config            *Config
@@ -25,6 +33,7 @@ type Worker struct {
 	proberManager     k8s.ProberManager
 	prometheusManager k8s.PrometheusManager
 	readinessCallback func(bool)
+	preflightFirstSeen map[string]time.Time
 }
 
 func NewWorker(cfg *Config) (*Worker, error) {
@@ -144,12 +153,13 @@ func NewWorker(cfg *Config) (*Worker, error) {
 	}
 
 	w := &Worker{
-		config:            cfg,
-		apiClients:        apiClients,
-		probeManager:      probeManager,
-		proberManager:     proberManager,
-		prometheusManager: prometheusManager,
-		readinessCallback: func(bool) {}, // no-op by default
+		config:             cfg,
+		apiClients:         apiClients,
+		probeManager:       probeManager,
+		proberManager:      proberManager,
+		prometheusManager:  prometheusManager,
+		readinessCallback:  func(bool) {},
+		preflightFirstSeen: make(map[string]time.Time),
 	}
 	return w, nil
 }
@@ -466,6 +476,27 @@ func (w *Worker) manageProber(ctx context.Context, name string) error {
 // createProbe processes a single probe (extracted for testing)
 func (w *Worker) createProbe(ctx context.Context, probe api.Probe) error {
 	logger.Infof("Processing probe %s with target URL: %s", probe.ID, probe.StaticURL)
+
+	if !w.probeManager.CheckConnectivity(ctx, probe.StaticURL, w.config.Blackbox.Probing) {
+		firstSeen, tracked := w.preflightFirstSeen[probe.ID]
+		if !tracked {
+			w.preflightFirstSeen[probe.ID] = time.Now()
+			logger.Infof("Pre-flight connectivity check failed for probe %s (%s), leaving in pending status to retry next cycle", probe.ID, probe.StaticURL)
+			metrics.RecordProbeResourceOperation("preflight_fail", false)
+			return nil
+		}
+		if time.Since(firstSeen) < defaultPreflightTimeout {
+			logger.Infof("Pre-flight connectivity check failed for probe %s (%s), leaving in pending status to retry next cycle (%s remaining)",
+				probe.ID, probe.StaticURL, (defaultPreflightTimeout - time.Since(firstSeen)).Truncate(time.Second))
+			metrics.RecordProbeResourceOperation("preflight_fail", false)
+			return nil
+		}
+		logger.Infof("Pre-flight timeout exceeded for probe %s (%s), creating Probe CR to allow alerting on persistent connectivity failures", probe.ID, probe.StaticURL)
+		metrics.RecordProbeResourceOperation("preflight_timeout", true)
+	} else {
+		metrics.RecordProbeResourceOperation("preflight_pass", true)
+	}
+	delete(w.preflightFirstSeen, probe.ID)
 
 	// Try to create the probe Custom Resource in Kubernetes
 	err := w.probeManager.CreateProbeK8sResource(probe, w.config.Blackbox.Probing)

@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -24,6 +25,8 @@ type Agent struct {
 	shutdownOnce    sync.Once
 	ready           bool
 	readyMu         sync.RWMutex
+	metricsAddr     string
+	metricsReady    chan struct{}
 }
 
 func New(cfg *Config) (*Agent, error) {
@@ -43,6 +46,7 @@ func New(cfg *Config) (*Agent, error) {
 		config:          cfg,
 		worker:          worker,
 		shutdownChan:    make(chan struct{}),
+		metricsReady:    make(chan struct{}),
 		ready:           false,
 	}
 
@@ -126,6 +130,13 @@ func (a *Agent) Run() error {
 	return nil
 }
 
+// MetricsAddr blocks until the metrics server has bound its listener,
+// then returns the address it is listening on.
+func (a *Agent) MetricsAddr() string {
+	<-a.metricsReady
+	return a.metricsAddr
+}
+
 // Shutdown gracefully shuts down the agent (useful for testing)
 func (a *Agent) Shutdown() {
 	a.shutdownOnce.Do(func() {
@@ -140,8 +151,20 @@ func (a *Agent) startMetricsServer(ctx context.Context) error {
 	mux.HandleFunc("/livez", a.handleLiveness)
 	mux.HandleFunc("/readyz", a.handleReadiness)
 	
+	addr := ":8080"
+	if a.config != nil && a.config.MetricsAddr != "" {
+		addr = a.config.MetricsAddr
+	}
+
+	lc := net.ListenConfig{}
+	ln, err := lc.Listen(ctx, "tcp", addr)
+	if err != nil {
+		return fmt.Errorf("metrics server failed: %w", err)
+	}
+	a.metricsAddr = ln.Addr().String()
+	close(a.metricsReady)
+
 	server := &http.Server{
-		Addr:    ":8080",
 		Handler: mux,
 	}
 
@@ -154,8 +177,8 @@ func (a *Agent) startMetricsServer(ctx context.Context) error {
 		}
 	}()
 
-	logger.Info("Starting metrics server on :8080 with /metrics, /livez, and /readyz endpoints")
-	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+	logger.Infof("Starting metrics server on %s with /metrics, /livez, and /readyz endpoints", a.metricsAddr)
+	if err := server.Serve(ln); err != nil && err != http.ErrServerClosed {
 		return fmt.Errorf("metrics server failed: %w", err)
 	}
 	
