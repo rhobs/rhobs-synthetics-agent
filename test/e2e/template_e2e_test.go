@@ -4,7 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"testing"
 
 	"sigs.k8s.io/yaml"
@@ -29,7 +28,7 @@ func loadTemplate(t *testing.T) templateFile {
 	return tmpl
 }
 
-func objectsByKind(tmpl templateFile, kind string) []map[string]interface{} {
+func templateObjectsByKind(tmpl templateFile, kind string) []map[string]interface{} {
 	var out []map[string]interface{}
 	for _, obj := range tmpl.Objects {
 		if k, _ := obj["kind"].(string); k == kind {
@@ -39,123 +38,156 @@ func objectsByKind(tmpl templateFile, kind string) []map[string]interface{} {
 	return out
 }
 
+const oidcSecretName = "${APPLICATION_NAME}-oidc"
+
+var oidcEnvToSecretKey = map[string]string{
+	"OIDC_CLIENT_ID":     "client-id",
+	"OIDC_CLIENT_SECRET": "client-secret",
+	"OIDC_ISSUER_URL":    "issuer-url",
+}
+
+var oidcSecretKeyToParam = map[string]string{
+	"client-id":     "${OIDC_CLIENT_ID}",
+	"client-secret": "${OIDC_CLIENT_SECRET}",
+	"issuer-url":    "${OIDC_ISSUER_URL}",
+}
+
+func findOIDCSecret(t *testing.T, tmpl templateFile) map[string]interface{} {
+	t.Helper()
+	for _, s := range templateObjectsByKind(tmpl, "Secret") {
+		meta, _ := s["metadata"].(map[string]interface{})
+		name, _ := meta["name"].(string)
+		if name == oidcSecretName {
+			return s
+		}
+	}
+	t.Fatalf("template must contain Secret named %q", oidcSecretName)
+	return nil
+}
+
+func templateDeploymentEnvVars(t *testing.T, tmpl templateFile) []map[string]interface{} {
+	t.Helper()
+	var envs []map[string]interface{}
+	for _, deploy := range templateObjectsByKind(tmpl, "Deployment") {
+		spec, _ := deploy["spec"].(map[string]interface{})
+		template, _ := spec["template"].(map[string]interface{})
+		podSpec, _ := template["spec"].(map[string]interface{})
+		containers, _ := podSpec["containers"].([]interface{})
+		for _, c := range containers {
+			container, _ := c.(map[string]interface{})
+			envList, _ := container["env"].([]interface{})
+			for _, e := range envList {
+				env, _ := e.(map[string]interface{})
+				envs = append(envs, env)
+			}
+		}
+	}
+	return envs
+}
+
 func TestE2E_TemplateOIDCSecretInjection(t *testing.T) {
 	tmpl := loadTemplate(t)
 
 	t.Run("SecretObjectExists", func(t *testing.T) {
-		secrets := objectsByKind(tmpl, "Secret")
-
-		var oidcSecret map[string]interface{}
-		for _, s := range secrets {
-			meta, _ := s["metadata"].(map[string]interface{})
-			name, _ := meta["name"].(string)
-			if strings.Contains(name, "oidc") {
-				oidcSecret = s
-				break
-			}
-		}
-		if oidcSecret == nil {
-			t.Fatal("template must contain a Secret object for OIDC credentials")
-		}
+		oidcSecret := findOIDCSecret(t, tmpl)
 
 		stringData, _ := oidcSecret["stringData"].(map[string]interface{})
 		if stringData == nil {
 			t.Fatal("OIDC Secret must have stringData")
 		}
 
-		for _, key := range []string{"client-id", "client-secret", "issuer-url"} {
-			if _, ok := stringData[key]; !ok {
+		for key, expectedParam := range oidcSecretKeyToParam {
+			val, ok := stringData[key]
+			if !ok {
 				t.Errorf("OIDC Secret missing required key %q", key)
+				continue
+			}
+			valStr, _ := val.(string)
+			if valStr != expectedParam {
+				t.Errorf("OIDC Secret key %q = %q, want template parameter %q", key, valStr, expectedParam)
 			}
 		}
 	})
 
 	t.Run("NoLiteralOIDCValuesInPodSpec", func(t *testing.T) {
-		sensitiveVars := map[string]bool{
-			"OIDC_CLIENT_ID":     true,
-			"OIDC_CLIENT_SECRET": true,
-			"OIDC_ISSUER_URL":    true,
+		envs := templateDeploymentEnvVars(t, tmpl)
+
+		found := make(map[string]bool)
+		for _, env := range envs {
+			name, _ := env["name"].(string)
+			expectedKey, isOIDC := oidcEnvToSecretKey[name]
+			if !isOIDC {
+				continue
+			}
+			found[name] = true
+
+			if _, hasValue := env["value"]; hasValue {
+				t.Errorf("env var %s uses literal value — must use valueFrom.secretKeyRef (CWE-522)", name)
+			}
+
+			valueFrom, _ := env["valueFrom"].(map[string]interface{})
+			if valueFrom == nil {
+				t.Errorf("env var %s missing valueFrom", name)
+				continue
+			}
+			ref, _ := valueFrom["secretKeyRef"].(map[string]interface{})
+			if ref == nil {
+				t.Errorf("env var %s has valueFrom but not secretKeyRef", name)
+				continue
+			}
+			refName, _ := ref["name"].(string)
+			if refName != oidcSecretName {
+				t.Errorf("env var %s secretKeyRef references %q, want %q", name, refName, oidcSecretName)
+			}
+			refKey, _ := ref["key"].(string)
+			if refKey != expectedKey {
+				t.Errorf("env var %s secretKeyRef key = %q, want %q", name, refKey, expectedKey)
+			}
 		}
 
-		for _, deploy := range objectsByKind(tmpl, "Deployment") {
-			spec, _ := deploy["spec"].(map[string]interface{})
-			template, _ := spec["template"].(map[string]interface{})
-			podSpec, _ := template["spec"].(map[string]interface{})
-			containers, _ := podSpec["containers"].([]interface{})
-
-			for _, c := range containers {
-				container, _ := c.(map[string]interface{})
-				envList, _ := container["env"].([]interface{})
-
-				for _, e := range envList {
-					env, _ := e.(map[string]interface{})
-					name, _ := env["name"].(string)
-					if !sensitiveVars[name] {
-						continue
-					}
-
-					if _, hasValue := env["value"]; hasValue {
-						t.Errorf("env var %s uses literal value — must use valueFrom.secretKeyRef "+
-							"to avoid leaking credentials in pod spec (CWE-522)", name)
-					}
-
-					valueFrom, _ := env["valueFrom"].(map[string]interface{})
-					if valueFrom == nil {
-						t.Errorf("env var %s missing valueFrom", name)
-						continue
-					}
-					if _, ok := valueFrom["secretKeyRef"]; !ok {
-						t.Errorf("env var %s has valueFrom but not secretKeyRef", name)
-					}
-				}
+		for envName := range oidcEnvToSecretKey {
+			if !found[envName] {
+				t.Errorf("required OIDC env var %s not found in Deployment pod spec", envName)
 			}
 		}
 	})
 
 	t.Run("SecretKeyRefMatchesSecretName", func(t *testing.T) {
-		var secretName string
-		for _, s := range objectsByKind(tmpl, "Secret") {
-			meta, _ := s["metadata"].(map[string]interface{})
-			name, _ := meta["name"].(string)
-			if strings.Contains(name, "oidc") {
-				secretName = name
-				break
+		findOIDCSecret(t, tmpl)
+		envs := templateDeploymentEnvVars(t, tmpl)
+
+		found := make(map[string]bool)
+		for _, env := range envs {
+			name, _ := env["name"].(string)
+			expectedKey, isOIDC := oidcEnvToSecretKey[name]
+			if !isOIDC {
+				continue
+			}
+			found[name] = true
+
+			valueFrom, _ := env["valueFrom"].(map[string]interface{})
+			if valueFrom == nil {
+				t.Errorf("env var %s missing valueFrom", name)
+				continue
+			}
+			ref, _ := valueFrom["secretKeyRef"].(map[string]interface{})
+			if ref == nil {
+				t.Errorf("env var %s missing secretKeyRef", name)
+				continue
+			}
+			refName, _ := ref["name"].(string)
+			if refName != oidcSecretName {
+				t.Errorf("env var %s secretKeyRef references %q, want %q", name, refName, oidcSecretName)
+			}
+			refKey, _ := ref["key"].(string)
+			if refKey != expectedKey {
+				t.Errorf("env var %s secretKeyRef key = %q, want %q", name, refKey, expectedKey)
 			}
 		}
-		if secretName == "" {
-			t.Fatal("no OIDC Secret found")
-		}
 
-		for _, deploy := range objectsByKind(tmpl, "Deployment") {
-			spec, _ := deploy["spec"].(map[string]interface{})
-			template, _ := spec["template"].(map[string]interface{})
-			podSpec, _ := template["spec"].(map[string]interface{})
-			containers, _ := podSpec["containers"].([]interface{})
-
-			for _, c := range containers {
-				container, _ := c.(map[string]interface{})
-				envList, _ := container["env"].([]interface{})
-
-				for _, e := range envList {
-					env, _ := e.(map[string]interface{})
-					name, _ := env["name"].(string)
-					if !strings.HasPrefix(name, "OIDC_") {
-						continue
-					}
-					valueFrom, _ := env["valueFrom"].(map[string]interface{})
-					if valueFrom == nil {
-						continue
-					}
-					ref, _ := valueFrom["secretKeyRef"].(map[string]interface{})
-					if ref == nil {
-						continue
-					}
-					refName, _ := ref["name"].(string)
-					if refName != secretName {
-						t.Errorf("env var %s references secret %q but OIDC Secret is named %q",
-							name, refName, secretName)
-					}
-				}
+		for envName := range oidcEnvToSecretKey {
+			if !found[envName] {
+				t.Errorf("required OIDC env var %s not found in Deployment pod spec", envName)
 			}
 		}
 	})
