@@ -5,7 +5,7 @@ go 1.26.0
 require (
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/oklog/run v1.2.0
-	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.93.0
+	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.93.1
 	github.com/prometheus/client_golang v1.24.1
 	github.com/rhobs/obo-prometheus-operator/pkg/apis/monitoring v0.87.0-rhobs1
 	github.com/rhobs/rhobs-synthetics-api v0.0.0-20251103033049-84bd137f3561
@@ -64,8 +64,8 @@ require (
 	golang.org/x/term v0.45.0 // indirect
 	golang.org/x/text v0.40.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
-	google.golang.org/protobuf v1.36.12-0.20260806062936-644d0267c26e // indirect
-	gopkg.in/evanphx/json-patch.v5 v5.9.11 // indirect
+	google.golang.org/protobuf v1.36.12 // indirect
+	gopkg.in/evanphx/json-patch.v4 v4.13.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	k8s.io/klog/v2 v2.140.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20260721132016-d427ff9ee9ad // indirect
