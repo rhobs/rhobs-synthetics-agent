@@ -115,6 +115,21 @@ objects:
         cpu_limits: ${PROMETHEUS_CPU_LIMIT}
         memory_requests: ${PROMETHEUS_MEMORY_REQUEST}
         memory_limits: ${PROMETHEUS_MEMORY_LIMIT}
+- apiVersion: v1
+  kind: Secret
+  metadata:
+    name: ${APPLICATION_NAME}-oidc
+    namespace: ${NAMESPACE}
+    labels:
+      app.kubernetes.io/component: synthetics-agent
+      app.kubernetes.io/instance: rhobs
+      app.kubernetes.io/name: synthetics-agent
+      app.kubernetes.io/part-of: rhobs
+  type: Opaque
+  stringData:
+    client-id: ${OIDC_CLIENT_ID}
+    client-secret: ${OIDC_CLIENT_SECRET}
+    issuer-url: ${OIDC_ISSUER_URL}
 - apiVersion: apps/v1
   kind: Deployment
   metadata:
@@ -181,11 +196,20 @@ objects:
                   fieldRef:
                     fieldPath: metadata.namespace
               - name: OIDC_CLIENT_ID
-                value: ${OIDC_CLIENT_ID}
+                valueFrom:
+                  secretKeyRef:
+                    name: ${APPLICATION_NAME}-oidc
+                    key: client-id
               - name: OIDC_CLIENT_SECRET
-                value: ${OIDC_CLIENT_SECRET}
+                valueFrom:
+                  secretKeyRef:
+                    name: ${APPLICATION_NAME}-oidc
+                    key: client-secret
               - name: OIDC_ISSUER_URL
-                value: ${OIDC_ISSUER_URL}
+                valueFrom:
+                  secretKeyRef:
+                    name: ${APPLICATION_NAME}-oidc
+                    key: issuer-url
             resources:
               limits:
                 cpu: ${CPU_LIMIT}

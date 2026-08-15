@@ -1031,6 +1031,166 @@ func TestBlackBoxProberManager_DeletePrometheus(t *testing.T) {
 	}
 }
 
+func TestBlackBoxProberManager_EnsureOIDCSecret(t *testing.T) {
+	ctx := context.Background()
+	namespace := "test-ns"
+
+	tests := []struct {
+		name       string
+		oidcConfig *OIDCConfig
+		objs       []runtime.Object
+		validate   func(clienttesting.ObjectTracker, error) (bool, string)
+	}{
+		{
+			name: "creates secret when none exists",
+			oidcConfig: &OIDCConfig{
+				ClientID:     "my-client",
+				ClientSecret: "my-secret",
+				IssuerURL:    "https://sso.example.com/realms/rhobs",
+			},
+			validate: func(tracker clienttesting.ObjectTracker, err error) (bool, string) {
+				if err != nil {
+					return false, fmt.Sprintf("unexpected error: %v", err)
+				}
+				obj, getErr := tracker.Get(corev1.SchemeGroupVersion.WithResource("secrets"), namespace, oidcSecretName)
+				if getErr != nil {
+					return false, fmt.Sprintf("secret not found after EnsureOIDCSecret: %v", getErr)
+				}
+				u := obj.(*unstructured.Unstructured)
+				sd, _, _ := unstructured.NestedMap(u.Object, "stringData")
+				if sd["client-id"] != "my-client" {
+					return false, fmt.Sprintf("expected client-id 'my-client', got %q", sd["client-id"])
+				}
+				if sd["client-secret"] != "my-secret" {
+					return false, fmt.Sprintf("expected client-secret 'my-secret', got %q", sd["client-secret"])
+				}
+				return true, ""
+			},
+		},
+		{
+			name: "updates existing secret",
+			oidcConfig: &OIDCConfig{
+				ClientID:     "updated-client",
+				ClientSecret: "updated-secret",
+				IssuerURL:    "https://sso.example.com/realms/rhobs",
+			},
+			objs: []runtime.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{Name: oidcSecretName, Namespace: namespace},
+				},
+			},
+			validate: func(tracker clienttesting.ObjectTracker, err error) (bool, string) {
+				if err != nil {
+					return false, fmt.Sprintf("unexpected error: %v", err)
+				}
+				obj, getErr := tracker.Get(corev1.SchemeGroupVersion.WithResource("secrets"), namespace, oidcSecretName)
+				if getErr != nil {
+					return false, fmt.Sprintf("secret not found after update: %v", getErr)
+				}
+				u := obj.(*unstructured.Unstructured)
+				sd, _, _ := unstructured.NestedMap(u.Object, "stringData")
+				if sd["client-id"] != "updated-client" {
+					return false, fmt.Sprintf("expected updated client-id, got %q", sd["client-id"])
+				}
+				return true, ""
+			},
+		},
+		{
+			name:       "skips when oidcConfig is nil",
+			oidcConfig: nil,
+			validate: func(_ clienttesting.ObjectTracker, err error) (bool, string) {
+				if err != nil {
+					return false, fmt.Sprintf("expected nil error for nil config, got: %v", err)
+				}
+				return true, ""
+			},
+		},
+		{
+			name:       "skips when client ID is empty",
+			oidcConfig: &OIDCConfig{ClientID: "", ClientSecret: "s", IssuerURL: "u"},
+			validate: func(_ clienttesting.ObjectTracker, err error) (bool, string) {
+				if err != nil {
+					return false, fmt.Sprintf("expected nil error for empty client ID, got: %v", err)
+				}
+				return true, ""
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			manager, tracker := newTestBlackBoxProberManagerWithTracker(namespace, BlackboxDeploymentConfig{}, tt.objs)
+			manager.oidcConfig = tt.oidcConfig
+
+			err := manager.EnsureOIDCSecret(ctx)
+
+			valid, reason := tt.validate(tracker, err)
+			if !valid {
+				t.Errorf("EnsureOIDCSecret %q: %s", tt.name, reason)
+			}
+		})
+	}
+}
+
+func TestBlackBoxProberManager_PrometheusOAuth2UsesSecretKeyRef(t *testing.T) {
+	manager := &BlackBoxProberManager{
+		namespace:         "test-ns",
+		managedByOperator: "observability-operator",
+		remoteWriteURL:    "http://thanos-receive:19291/api/v1/receive",
+		remoteWriteTenant: "test-tenant",
+		oidcConfig: &OIDCConfig{
+			ClientID:     "test-client",
+			ClientSecret: "test-secret",
+			IssuerURL:    "https://sso.example.com/realms/rhobs",
+		},
+	}
+
+	specs := manager.buildRemoteWriteSpecs()
+	if len(specs) != 1 {
+		t.Fatalf("expected 1 remote write spec, got %d", len(specs))
+	}
+
+	oauth2 := specs[0].OAuth2
+	if oauth2 == nil {
+		t.Fatal("expected OAuth2 config when OIDC is configured")
+	}
+
+	if oauth2.ClientID.Secret == nil {
+		t.Fatal("OAuth2 ClientID must use secretKeyRef, not a literal value")
+	}
+	if oauth2.ClientID.Secret.Name != oidcSecretName {
+		t.Errorf("OAuth2 ClientID secret name = %q, want %q", oauth2.ClientID.Secret.Name, oidcSecretName)
+	}
+	if oauth2.ClientID.Secret.Key != "client-id" {
+		t.Errorf("OAuth2 ClientID secret key = %q, want %q", oauth2.ClientID.Secret.Key, "client-id")
+	}
+
+	if oauth2.ClientSecret.Name != oidcSecretName {
+		t.Errorf("OAuth2 ClientSecret secret name = %q, want %q", oauth2.ClientSecret.Name, oidcSecretName)
+	}
+	if oauth2.ClientSecret.Key != "client-secret" {
+		t.Errorf("OAuth2 ClientSecret secret key = %q, want %q", oauth2.ClientSecret.Key, "client-secret")
+	}
+}
+
+func TestBlackBoxProberManager_NoOAuth2WhenOIDCNotConfigured(t *testing.T) {
+	manager := &BlackBoxProberManager{
+		namespace:         "test-ns",
+		managedByOperator: "observability-operator",
+		remoteWriteURL:    "http://thanos-receive:19291/api/v1/receive",
+		remoteWriteTenant: "test-tenant",
+		oidcConfig:        nil,
+	}
+
+	specs := manager.buildRemoteWriteSpecs()
+	if len(specs) != 1 {
+		t.Fatalf("expected 1 remote write spec, got %d", len(specs))
+	}
+	if specs[0].OAuth2 != nil {
+		t.Error("OAuth2 should be nil when OIDC is not configured")
+	}
+}
+
 func TestBlackBoxProberManager_PrometheusResourceDefaults(t *testing.T) {
 	// Test default values without requiring K8s client
 	manager := &BlackBoxProberManager{
