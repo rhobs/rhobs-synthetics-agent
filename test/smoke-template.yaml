@@ -62,7 +62,7 @@ objects:
 
                   log "--- Agent Metrics Endpoint ---"
                   METRICS=""
-                  if curl -sSL --retry 3 --retry-delay 5 --max-time 10 "${AGENT_URL}/metrics" -o /tmp/metrics 2>/dev/null; then
+                  if curl -fsSL --retry 3 --retry-delay 5 --max-time 10 "${AGENT_URL}/metrics" -o /tmp/metrics 2>/dev/null; then
                     METRICS=$(cat /tmp/metrics)
                   fi
                   if [[ -z "$METRICS" ]]; then
@@ -80,7 +80,7 @@ objects:
                   log "--- Probe Data Flowing (Thanos) ---"
                   PROBE_COUNT="0"
                   THANOS_REACHABLE=false
-                  if curl -sSL --retry 3 --retry-delay 5 --max-time 10 \
+                  if curl -fsSL --retry 3 --retry-delay 5 --max-time 10 \
                     "${THANOS_URL}/api/v1/query" \
                     --data-urlencode "query=count(probe_success)" -o /tmp/probe_result 2>/dev/null; then
                     THANOS_REACHABLE=true
@@ -99,7 +99,7 @@ objects:
                   log "--- Probe Data Freshness ---"
                   FRESH_COUNT="0"
                   if [[ "$THANOS_REACHABLE" == "true" ]]; then
-                    if curl -sSL --retry 3 --retry-delay 5 --max-time 10 \
+                    if curl -fsSL --retry 3 --retry-delay 5 --max-time 10 \
                       "${THANOS_URL}/api/v1/query" \
                       --data-urlencode "query=count(probe_success{} unless probe_success{} offset 10m)" -o /tmp/fresh_result 2>/dev/null; then
                       FRESH_COUNT=$(jq -r '.data.result[0].value[1] // "0"' /tmp/fresh_result 2>/dev/null || echo "0")
