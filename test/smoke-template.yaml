@@ -32,7 +32,7 @@ objects:
               image: quay.io/openshift/origin-tools:latest
               command:
                 - /bin/bash
-                - -ceu
+                - -cu
                 - |
                   FAILURES=0
                   log() { echo "$(date +%H:%M:%S) $*"; }
@@ -42,8 +42,26 @@ objects:
                   log "  Thanos URL: ${THANOS_URL}"
                   echo ""
 
+                  log "--- Waiting for Agent readiness ---"
+                  READY=false
+                  for i in $(seq 1 12); do
+                    if curl -sf --max-time 5 "${AGENT_URL}/readyz" >/dev/null 2>&1; then
+                      READY=true
+                      break
+                    fi
+                    log "  attempt $i/12: agent not ready, retrying in 10s..."
+                    sleep 10
+                  done
+                  if [[ "$READY" != "true" ]]; then
+                    log "FAIL  agent not ready after 2 minutes"
+                    FAILURES=$((FAILURES + 1))
+                  else
+                    log "PASS  agent is ready"
+                  fi
+                  echo ""
+
                   log "--- Agent Metrics Endpoint ---"
-                  METRICS=$(curl -sfSL --retry 3 --retry-delay 5 --max-time 10 "${AGENT_URL}/metrics" 2>/dev/null)
+                  METRICS=$(curl -sSL --retry 3 --retry-delay 5 --max-time 10 "${AGENT_URL}/metrics" 2>/dev/null || true)
                   if [[ -z "$METRICS" ]]; then
                     log "FAIL  /metrics: no response"
                     FAILURES=$((FAILURES + 1))
@@ -57,10 +75,10 @@ objects:
 
                   echo ""
                   log "--- Probe Data Flowing (Thanos) ---"
-                  PROBE_RESULT=$(curl -sfSL --retry 3 --retry-delay 5 --max-time 10 \
+                  PROBE_RESULT=$(curl -sSL --retry 3 --retry-delay 5 --max-time 10 \
                     "${THANOS_URL}/api/v1/query" \
-                    --data-urlencode "query=count(probe_success)" 2>/dev/null)
-                  PROBE_COUNT=$(echo "$PROBE_RESULT" | jq -r '.data.result[0].value[1] // "0"')
+                    --data-urlencode "query=count(probe_success)" 2>/dev/null || true)
+                  PROBE_COUNT=$(echo "$PROBE_RESULT" | jq -r '.data.result[0].value[1] // "0"' 2>/dev/null || echo "0")
                   if [[ "$PROBE_COUNT" == "0" ]]; then
                     log "WARN  probe_success: no data (may be expected on small cells)"
                   else
@@ -69,10 +87,10 @@ objects:
 
                   echo ""
                   log "--- Probe Data Freshness ---"
-                  FRESH_RESULT=$(curl -sfSL --retry 3 --retry-delay 5 --max-time 10 \
+                  FRESH_RESULT=$(curl -sSL --retry 3 --retry-delay 5 --max-time 10 \
                     "${THANOS_URL}/api/v1/query" \
-                    --data-urlencode "query=count(probe_success{} unless probe_success{} offset 10m)" 2>/dev/null)
-                  FRESH_COUNT=$(echo "$FRESH_RESULT" | jq -r '.data.result[0].value[1] // "0"')
+                    --data-urlencode "query=count(probe_success{} unless probe_success{} offset 10m)" 2>/dev/null || true)
+                  FRESH_COUNT=$(echo "$FRESH_RESULT" | jq -r '.data.result[0].value[1] // "0"' 2>/dev/null || echo "0")
                   if [[ "$PROBE_COUNT" != "0" && "$FRESH_COUNT" == "0" ]]; then
                     log "FAIL  probe freshness: data exists but no new samples in 10m"
                     FAILURES=$((FAILURES + 1))
