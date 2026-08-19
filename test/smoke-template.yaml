@@ -101,7 +101,7 @@ objects:
                   if [[ "$THANOS_REACHABLE" == "true" ]]; then
                     if curl -fsSL --retry 3 --retry-delay 5 --max-time 10 \
                       "${THANOS_URL}/api/v1/query" \
-                      --data-urlencode "query=count(probe_success{} unless probe_success{} offset 10m)" -o /tmp/fresh_result 2>/dev/null; then
+                      --data-urlencode "query=count(count_over_time(probe_success[10m]) > 0)" -o /tmp/fresh_result 2>/dev/null; then
                       FRESH_COUNT=$(jq -r '.data.result[0].value[1] // "0"' /tmp/fresh_result 2>/dev/null || echo "0")
                     else
                       log "FAIL  Thanos freshness query failed"
