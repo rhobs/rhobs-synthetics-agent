@@ -15,6 +15,12 @@ import (
 	"github.com/rhobs/rhobs-synthetics-agent/internal/logger"
 	"github.com/rhobs/rhobs-synthetics-agent/internal/metrics"
 	"github.com/rhobs/rhobs-synthetics-agent/internal/version"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/client-go/tools/leaderelection"
+	"k8s.io/client-go/tools/leaderelection/resourcelock"
 )
 
 type Agent struct {
@@ -97,16 +103,26 @@ func (a *Agent) Run() error {
 		})
 	}
 
-	// Main worker goroutine
+	// Main worker goroutine (with optional leader election)
 	{
 		ctx, cancel := context.WithCancel(context.Background())
-		g.Add(func() error {
-			return a.worker.Start(ctx, &a.taskWG, a.shutdownChan)
-		}, func(error) {
-			logger.Info("shutting down worker")
-			a.setReady(false)
-			cancel()
-		})
+		if a.config != nil && a.config.LeaderElect {
+			g.Add(func() error {
+				return a.runWithLeaderElection(ctx)
+			}, func(error) {
+				logger.Info("shutting down leader election")
+				a.setReady(false)
+				cancel()
+			})
+		} else {
+			g.Add(func() error {
+				return a.worker.Start(ctx, &a.taskWG, a.shutdownChan)
+			}, func(error) {
+				logger.Info("shutting down worker")
+				a.setReady(false)
+				cancel()
+			})
+		}
 	}
 
 	// Metrics server
@@ -190,6 +206,103 @@ func (a *Agent) setReady(ready bool) {
 	a.readyMu.Lock()
 	defer a.readyMu.Unlock()
 	a.ready = ready
+}
+
+const (
+	leaseName      = "synthetics-agent"
+	leaseDuration  = 15 * time.Second
+	renewDeadline  = 10 * time.Second
+	retryPeriod    = 2 * time.Second
+)
+
+func (a *Agent) runWithLeaderElection(ctx context.Context) error {
+	var restCfg *rest.Config
+	var err error
+	if a.config != nil && a.config.KubeConfig != "" {
+		restCfg, err = clientcmd.BuildConfigFromFlags("", a.config.KubeConfig)
+	} else {
+		restCfg, err = rest.InClusterConfig()
+	}
+	if err != nil {
+		return fmt.Errorf("failed to build kubernetes config for leader election: %w", err)
+	}
+
+	clientset, err := kubernetes.NewForConfig(restCfg)
+	if err != nil {
+		return fmt.Errorf("failed to create kubernetes client for leader election: %w", err)
+	}
+
+	id := os.Getenv("POD_NAME")
+	if id == "" {
+		id, err = os.Hostname()
+		if err != nil {
+			return fmt.Errorf("failed to determine pod identity: %w", err)
+		}
+	}
+
+	namespace := "default"
+	if envNS := os.Getenv("NAMESPACE"); envNS != "" {
+		namespace = envNS
+	} else if a.config != nil && a.config.Namespace != "" {
+		namespace = a.config.Namespace
+	}
+
+	lock := &resourcelock.LeaseLock{
+		LeaseMeta: metav1.ObjectMeta{
+			Name:      leaseName,
+			Namespace: namespace,
+		},
+		Client: clientset.CoordinationV1(),
+		LockConfig: resourcelock.ResourceLockConfig{
+			Identity: id,
+		},
+	}
+
+	// Verify lease RBAC before entering the leader election loop.
+	// If the service account cannot access leases (e.g. e2e / dev environments),
+	// fall back to running without leader election rather than hanging.
+	_, rbacErr := clientset.CoordinationV1().Leases(namespace).List(ctx, metav1.ListOptions{Limit: 1})
+	if rbacErr != nil {
+		logger.Warnf("Leader election RBAC check failed (%v); falling back to single-replica mode", rbacErr)
+		return a.worker.Start(ctx, &a.taskWG, a.shutdownChan)
+	}
+
+	logger.Infof("Starting leader election (id=%s, namespace=%s)", id, namespace)
+
+	le, err := leaderelection.NewLeaderElector(leaderelection.LeaderElectionConfig{
+		Lock:            lock,
+		LeaseDuration:   leaseDuration,
+		RenewDeadline:   renewDeadline,
+		RetryPeriod:     retryPeriod,
+		ReleaseOnCancel: true,
+		Callbacks: leaderelection.LeaderCallbacks{
+			OnStartedLeading: func(leaderCtx context.Context) {
+				logger.Info("Acquired leader lease, starting reconciliation")
+				metrics.SetLeader(true)
+				if err := a.worker.Start(leaderCtx, &a.taskWG, a.shutdownChan); err != nil && leaderCtx.Err() == nil {
+					logger.Errorf("Worker error: %v", err)
+				}
+			},
+			OnStoppedLeading: func() {
+				logger.Info("Lost leader lease, stopped reconciliation")
+				metrics.SetLeader(false)
+				a.setReady(false)
+			},
+			OnNewLeader: func(identity string) {
+				if identity == id {
+					logger.Info("This instance is the leader")
+					return
+				}
+				logger.Infof("Current leader: %s", identity)
+			},
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create leader elector: %w", err)
+	}
+
+	le.Run(ctx)
+	return nil
 }
 
 // isReady returns the current readiness state

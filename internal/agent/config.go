@@ -38,6 +38,9 @@ type Config struct {
 
 	// Metrics server address (default ":8080")
 	MetricsAddr string `mapstructure:"metrics_addr"`
+
+	// Leader election (safe to run multiple replicas)
+	LeaderElect bool `mapstructure:"leader_elect"`
 }
 
 const (
@@ -145,6 +148,7 @@ func LoadConfig() (*Config, error) {
 	viper.SetDefault("kube_config", "")
 	viper.SetDefault("namespace", "default")
 	viper.SetDefault("metrics_addr", ":8080")
+	viper.SetDefault("leader_elect", true)
 
 	k8s.LoadBlackboxDefaults()
 
