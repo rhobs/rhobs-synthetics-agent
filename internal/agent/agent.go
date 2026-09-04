@@ -258,13 +258,17 @@ func (a *Agent) runWithLeaderElection(ctx context.Context) error {
 		},
 	}
 
-	// Verify lease RBAC before entering the leader election loop.
-	// If the service account cannot access leases (e.g. e2e / dev environments),
-	// fall back to running without leader election rather than hanging.
-	_, rbacErr := clientset.CoordinationV1().Leases(namespace).List(ctx, metav1.ListOptions{Limit: 1})
-	if rbacErr != nil {
-		logger.Warnf("Leader election RBAC check failed (%v); falling back to single-replica mode", rbacErr)
-		return a.worker.Start(ctx, &a.taskWG, a.shutdownChan)
+	// Verify lease RBAC before entering the leader election loop. If the
+	// service account cannot access leases, fail fast and loudly instead of
+	// either hanging forever (the leader elector retries indefinitely) or
+	// silently running the worker unsupervised: if every replica hit this
+	// same RBAC error, falling back to worker.Start() on all of them would
+	// mean multiple unsupervised reconcilers racing on the same Probe CRs -
+	// exactly the split-brain behavior leader election exists to prevent.
+	// A missing Lease permission is a deployment misconfiguration that
+	// should be fixed (see RBAC in templates/template.yaml), not masked.
+	if _, err := clientset.CoordinationV1().Leases(namespace).List(ctx, metav1.ListOptions{Limit: 1}); err != nil {
+		return fmt.Errorf("leader election RBAC check failed (missing coordination.k8s.io/leases permissions?): %w", err)
 	}
 
 	logger.Infof("Starting leader election (id=%s, namespace=%s)", id, namespace)
@@ -286,7 +290,13 @@ func (a *Agent) runWithLeaderElection(ctx context.Context) error {
 			OnStoppedLeading: func() {
 				logger.Info("Lost leader lease, stopped reconciliation")
 				metrics.SetLeader(false)
-				a.setReady(false)
+				// Do NOT flip readiness to false here: the process itself is
+				// still healthy and is simply returning to standby. Readiness
+				// reflects process health, not current leadership - see
+				// OnNewLeader below. Conflating the two would leave the
+				// standby permanently unready and can stall rolling updates
+				// (maxSurge:0/maxUnavailable:1 needs the standby to report
+				// Ready for the rollout to proceed).
 			},
 			OnNewLeader: func(identity string) {
 				if identity == id {
@@ -294,6 +304,11 @@ func (a *Agent) runWithLeaderElection(ctx context.Context) error {
 					return
 				}
 				logger.Infof("Current leader: %s", identity)
+				// This instance is a healthy standby: it is connected to the
+				// API server and participating in leader election, it just
+				// isn't reconciling. Mark it ready so it counts toward
+				// availability during rollouts.
+				a.setReady(true)
 			},
 		},
 	})
