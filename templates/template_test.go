@@ -147,6 +147,99 @@ func TestOIDCSecretObjectExists(t *testing.T) {
 	}
 }
 
+func TestLeaseRBACPresent(t *testing.T) {
+	tmpl := loadTemplate(t)
+	roles := objectsByKind(tmpl, "Role")
+	found := false
+	for _, role := range roles {
+		rules, _ := role["rules"].([]interface{})
+		for _, r := range rules {
+			rule, _ := r.(map[string]interface{})
+			apiGroups, _ := rule["apiGroups"].([]interface{})
+			resources, _ := rule["resources"].([]interface{})
+			for _, ag := range apiGroups {
+				if ag == "coordination.k8s.io" {
+					for _, res := range resources {
+						if res == "leases" {
+							found = true
+						}
+					}
+				}
+			}
+		}
+	}
+	if !found {
+		t.Error("template Role must grant access to coordination.k8s.io/leases for leader election")
+	}
+}
+
+func TestPodAntiAffinityPresent(t *testing.T) {
+	tmpl := loadTemplate(t)
+	for _, deploy := range objectsByKind(tmpl, "Deployment") {
+		spec, _ := deploy["spec"].(map[string]interface{})
+		template, _ := spec["template"].(map[string]interface{})
+		podSpec, _ := template["spec"].(map[string]interface{})
+		affinity, _ := podSpec["affinity"].(map[string]interface{})
+		if affinity == nil {
+			t.Fatal("Deployment must have affinity configured")
+		}
+		paa, _ := affinity["podAntiAffinity"].(map[string]interface{})
+		if paa == nil {
+			t.Fatal("Deployment must have podAntiAffinity configured")
+		}
+		required, _ := paa["requiredDuringSchedulingIgnoredDuringExecution"].([]interface{})
+		if len(required) == 0 {
+			t.Fatal("podAntiAffinity must have at least one requiredDuringSchedulingIgnoredDuringExecution term")
+		}
+		term, _ := required[0].(map[string]interface{})
+		topologyKey, _ := term["topologyKey"].(string)
+		if topologyKey != "kubernetes.io/hostname" {
+			t.Errorf("anti-affinity topologyKey = %q, want %q", topologyKey, "kubernetes.io/hostname")
+		}
+	}
+}
+
+func TestPodNameEnvVar(t *testing.T) {
+	tmpl := loadTemplate(t)
+	envs := deploymentEnvVars(t, tmpl)
+	found := false
+	for _, env := range envs {
+		name, _ := env["name"].(string)
+		if name != "POD_NAME" {
+			continue
+		}
+		found = true
+		valueFrom, _ := env["valueFrom"].(map[string]interface{})
+		if valueFrom == nil {
+			t.Error("POD_NAME must use valueFrom")
+			continue
+		}
+		fieldRef, _ := valueFrom["fieldRef"].(map[string]interface{})
+		if fieldRef == nil {
+			t.Error("POD_NAME must use fieldRef")
+			continue
+		}
+		fieldPath, _ := fieldRef["fieldPath"].(string)
+		if fieldPath != "metadata.name" {
+			t.Errorf("POD_NAME fieldPath = %q, want %q", fieldPath, "metadata.name")
+		}
+	}
+	if !found {
+		t.Error("Deployment must have POD_NAME env var for leader election identity")
+	}
+}
+
+func TestReplicaCountDefault(t *testing.T) {
+	tmpl := loadTemplate(t)
+	for _, deploy := range objectsByKind(tmpl, "Deployment") {
+		spec, _ := deploy["spec"].(map[string]interface{})
+		replicas := spec["replicas"]
+		if replicas != "${REPLICA_COUNT}" && replicas != "${{REPLICA_COUNT}}" {
+			t.Errorf("Deployment replicas = %v, want template parameter REPLICA_COUNT", replicas)
+		}
+	}
+}
+
 func TestSecretKeyRefMatchesSecretName(t *testing.T) {
 	tmpl := loadTemplate(t)
 	findOIDCSecret(t, tmpl)
