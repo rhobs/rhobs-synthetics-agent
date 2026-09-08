@@ -13,6 +13,26 @@ import (
 	"github.com/rhobs/rhobs-synthetics-agent/internal/k8s"
 )
 
+type testProber string
+
+func (p testProber) String() string { return string(p) }
+
+type recordingProberManager struct {
+	created chan struct{}
+	once    sync.Once
+}
+
+func (m *recordingProberManager) GetProber(context.Context, string) (k8s.Prober, bool, error) {
+	return nil, false, nil
+}
+
+func (m *recordingProberManager) CreateProber(context.Context, string) (k8s.Prober, error) {
+	m.once.Do(func() { close(m.created) })
+	return testProber("test-prober"), nil
+}
+
+func (*recordingProberManager) DeleteProber(context.Context, string) error { return nil }
+
 func TestNewWorker(t *testing.T) {
 	cfg := &Config{
 		LogLevel:        "info",
@@ -284,6 +304,75 @@ func TestWorker_Start_InitialRun(t *testing.T) {
 	}
 
 	// Wait for any remaining tasks
+	taskWG.Wait()
+}
+
+func TestWorker_Start_ReconcilesOperandsBeforeProbeAPI(t *testing.T) {
+	requestStarted := make(chan struct{})
+	releaseRequest := make(chan struct{})
+	var requestOnce sync.Once
+	var releaseOnce sync.Once
+	releaseAPI := func() { releaseOnce.Do(func() { close(releaseRequest) }) }
+	defer releaseAPI()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestOnce.Do(func() { close(requestStarted) })
+		<-releaseRequest
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"probes":[]}`))
+	}))
+	defer server.Close()
+
+	cfg := &Config{
+		PollingInterval: time.Hour,
+		GracefulTimeout: time.Second,
+		APIURLs:         []string{server.URL + "/probes"},
+		LabelSelector:   "private=false",
+	}
+	worker, err := NewWorker(cfg)
+	if err != nil {
+		t.Fatalf("unexpected error creating worker: %v", err)
+	}
+
+	proberManager := &recordingProberManager{created: make(chan struct{})}
+	worker.proberManager = proberManager
+	worker.prometheusManager = nil
+
+	ctx, cancel := context.WithCancel(context.Background())
+	var taskWG sync.WaitGroup
+	shutdownChan := make(chan struct{})
+	done := make(chan error, 1)
+	go func() {
+		done <- worker.Start(ctx, &taskWG, shutdownChan)
+	}()
+
+	select {
+	case <-requestStarted:
+	case <-time.After(time.Second):
+		cancel()
+		releaseAPI()
+		t.Fatal("Probe API request did not start")
+	}
+
+	select {
+	case <-proberManager.created:
+		// The API request is still blocked, so operand reconciliation did not
+		// wait for it to complete.
+	case <-time.After(time.Second):
+		cancel()
+		releaseAPI()
+		t.Fatal("prober operand was not reconciled before the Probe API completed")
+	}
+
+	releaseAPI()
+	cancel()
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("expected Start to return the context cancellation error")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("worker did not stop after context cancellation")
+	}
 	taskWG.Wait()
 }
 
