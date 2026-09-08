@@ -1064,6 +1064,9 @@ func TestBlackBoxProberManager_EnsureOIDCSecret(t *testing.T) {
 				if sd["client-secret"] != "my-secret" {
 					return false, fmt.Sprintf("expected client-secret 'my-secret', got %q", sd["client-secret"])
 				}
+				if sd["issuer-url"] != "https://sso.example.com/realms/rhobs" {
+					return false, fmt.Sprintf("expected issuer-url 'https://sso.example.com/realms/rhobs', got %q", sd["issuer-url"])
+				}
 				return true, ""
 			},
 		},
@@ -1072,7 +1075,7 @@ func TestBlackBoxProberManager_EnsureOIDCSecret(t *testing.T) {
 			oidcConfig: &OIDCConfig{
 				ClientID:     "updated-client",
 				ClientSecret: "updated-secret",
-				IssuerURL:    "https://sso.example.com/realms/rhobs",
+				IssuerURL:    "https://updated-sso.example.com/realms/rhobs",
 			},
 			objs: []runtime.Object{
 				&corev1.Secret{
@@ -1091,6 +1094,12 @@ func TestBlackBoxProberManager_EnsureOIDCSecret(t *testing.T) {
 				sd, _, _ := unstructured.NestedMap(u.Object, "stringData")
 				if sd["client-id"] != "updated-client" {
 					return false, fmt.Sprintf("expected updated client-id, got %q", sd["client-id"])
+				}
+				if sd["client-secret"] != "updated-secret" {
+					return false, fmt.Sprintf("expected updated client-secret, got %q", sd["client-secret"])
+				}
+				if sd["issuer-url"] != "https://updated-sso.example.com/realms/rhobs" {
+					return false, fmt.Sprintf("expected updated issuer-url, got %q", sd["issuer-url"])
 				}
 				return true, ""
 			},

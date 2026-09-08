@@ -27,12 +27,12 @@ const (
 )
 
 type Worker struct {
-	config            *Config
-	apiClients        []*api.Client
-	probeManager      *k8s.ProbeManager
-	proberManager     k8s.ProberManager
-	prometheusManager k8s.PrometheusManager
-	readinessCallback func(bool)
+	config             *Config
+	apiClients         []*api.Client
+	probeManager       *k8s.ProbeManager
+	proberManager      k8s.ProberManager
+	prometheusManager  k8s.PrometheusManager
+	readinessCallback  func(bool)
 	preflightFirstSeen map[string]time.Time
 }
 
@@ -184,7 +184,17 @@ func (w *Worker) Start(ctx context.Context, taskWG *sync.WaitGroup, shutdownChan
 	ticker := time.NewTicker(w.config.PollingInterval)
 	defer ticker.Stop()
 
-	// Initial run
+	// Reconcile operands before contacting the Probe APIs. API requests can take
+	// up to their client timeout, but the blackbox exporter must be available for
+	// probe pre-flight checks and Prometheus must be ready to scrape the results.
+	if err := w.processProbers(ctx, shutdownChan); err != nil {
+		logger.Errorf("failed to manage prober operands: %v\n", err)
+	}
+	if err := w.processPrometheus(ctx, shutdownChan); err != nil {
+		logger.Errorf("failed to manage prometheus instance: %v\n", err)
+	}
+
+	// Initial probe reconciliation.
 	if err := w.processProbes(ctx, taskWG, shutdownChan); err != nil {
 		logger.Errorf("initial work failed: %v\n", err)
 		w.readinessCallback(false)
@@ -202,15 +212,15 @@ func (w *Worker) Start(ctx context.Context, taskWG *sync.WaitGroup, shutdownChan
 			logger.Info("worker stopping due to shutdown signal")
 			return nil
 		case <-ticker.C:
-			if err := w.processProbes(ctx, taskWG, shutdownChan); err != nil {
-				logger.Errorf("work iteration failed: %v\n", err)
-				// Continue running even if one iteration fails
-			}
 			if err := w.processProbers(ctx, shutdownChan); err != nil {
 				logger.Errorf("failed to manage prober operands: %v\n", err)
 			}
 			if err := w.processPrometheus(ctx, shutdownChan); err != nil {
 				logger.Errorf("failed to manage prometheus instance: %v\n", err)
+			}
+			if err := w.processProbes(ctx, taskWG, shutdownChan); err != nil {
+				logger.Errorf("work iteration failed: %v\n", err)
+				// Continue running even if one iteration fails
 			}
 		}
 	}

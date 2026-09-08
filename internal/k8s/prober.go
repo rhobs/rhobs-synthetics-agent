@@ -529,7 +529,7 @@ func (m *BlackBoxProberManager) buildPrometheusResource() *promv1.Prometheus {
 }
 
 const (
-	// oidcSecretName is the name of the Secret holding OIDC credentials for Prometheus remote write
+	// oidcSecretName is the name of the Secret holding OIDC credentials for the agent and Prometheus remote write
 	oidcSecretName = "synthetics-agent-oidc"
 )
 
@@ -581,6 +581,7 @@ func (m *BlackBoxProberManager) EnsureOIDCSecret(ctx context.Context) error {
 		StringData: map[string]string{
 			"client-id":     m.oidcConfig.ClientID,
 			"client-secret": m.oidcConfig.ClientSecret,
+			"issuer-url":    m.oidcConfig.IssuerURL,
 		},
 	}
 
