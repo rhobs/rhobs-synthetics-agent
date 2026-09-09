@@ -96,7 +96,8 @@ objects:
                       log "FAIL  OIDC_ISSUER_URL must use HTTPS, got: ${OIDC_ISSUER_URL}"
                       FAILURES=$((FAILURES + 1))
                     else
-                      TOKEN_ENDPOINT=$(curl --proto '=https' -sf --max-time 10                         "${OIDC_ISSUER_URL}/.well-known/openid-configuration" | jq -r '.token_endpoint // empty')
+                      OIDC_DISCOVERY_URL="${OIDC_ISSUER_URL}/.well-known/openid-configuration"
+                      TOKEN_ENDPOINT=$(curl --proto '=https' -sf --max-time 10 "${OIDC_DISCOVERY_URL}" | jq -r '.token_endpoint // empty')
                       if [[ -z "$TOKEN_ENDPOINT" ]]; then
                         log "FAIL  could not discover token endpoint from ${OIDC_ISSUER_URL}"
                         FAILURES=$((FAILURES + 1))
@@ -104,7 +105,7 @@ objects:
                         log "FAIL  discovered token endpoint must use HTTPS, got: ${TOKEN_ENDPOINT}"
                         FAILURES=$((FAILURES + 1))
                       else
-                        TOKEN=$(curl --proto '=https' -sf --max-time 10 -X POST "${TOKEN_ENDPOINT}"                           -d "grant_type=client_credentials"                           --data-urlencode "client_id=${OIDC_CLIENT_ID}"                           --data-urlencode "client_secret=${OIDC_CLIENT_SECRET}" | jq -r '.access_token // empty')
+                        TOKEN=$(curl --proto '=https' -sf --max-time 10 -X POST "${TOKEN_ENDPOINT}" -d "grant_type=client_credentials" --data-urlencode "client_id=${OIDC_CLIENT_ID}" --data-urlencode "client_secret=${OIDC_CLIENT_SECRET}" | jq -r '.access_token // empty')
                         if [[ -z "$TOKEN" ]]; then
                           log "FAIL  could not fetch OIDC access token"
                           FAILURES=$((FAILURES + 1))
@@ -128,7 +129,7 @@ objects:
                   fi
                   PROBE_COUNT="0"
                   THANOS_REACHABLE=false
-                  if curl "${THANOS_CURL_OPTS[@]}"                     "${THANOS_URL}/api/v1/query"                     --data-urlencode "query=count(probe_success)" -o /tmp/probe_result 2>/dev/null; then
+                  if curl "${THANOS_CURL_OPTS[@]}" "${THANOS_URL}/api/v1/query" --data-urlencode "query=count(probe_success)" -o /tmp/probe_result 2>/dev/null; then
                     THANOS_REACHABLE=true
                     PROBE_COUNT=$(jq -r '.data.result[0].value[1] // "0"' /tmp/probe_result 2>/dev/null || echo "0")
                   fi
@@ -145,7 +146,7 @@ objects:
                   log "--- Probe Data Freshness ---"
                   FRESH_COUNT="0"
                   if [[ "$THANOS_REACHABLE" == "true" ]]; then
-                    if curl "${THANOS_CURL_OPTS[@]}"                       "${THANOS_URL}/api/v1/query"                       --data-urlencode "query=count(count_over_time(probe_success[10m]) > 0)" -o /tmp/fresh_result 2>/dev/null; then
+                    if curl "${THANOS_CURL_OPTS[@]}" "${THANOS_URL}/api/v1/query" --data-urlencode "query=count(count_over_time(probe_success[10m]) > 0)" -o /tmp/fresh_result 2>/dev/null; then
                       FRESH_COUNT=$(jq -r '.data.result[0].value[1] // "0"' /tmp/fresh_result 2>/dev/null || echo "0")
                     else
                       log "FAIL  Thanos freshness query failed"
