@@ -20,7 +20,7 @@ parameters:
   - name: OIDC_ISSUER_URL
     required: false
     value: ""
-    description: OIDC issuer URL for token discovery (backplane deployments)
+    description: OIDC token endpoint URL for client_credentials flow (backplane deployments; must be HTTPS)
   - name: JOBID
     generate: expression
     from: "[0-9a-z]{7}"
@@ -96,23 +96,13 @@ objects:
                       log "FAIL  OIDC_ISSUER_URL must use HTTPS, got: ${OIDC_ISSUER_URL}"
                       FAILURES=$((FAILURES + 1))
                     else
-                      OIDC_DISCOVERY_URL="${OIDC_ISSUER_URL}/.well-known/openid-configuration"
-                      TOKEN_ENDPOINT=$(curl --proto '=https' -sf --max-time 10 "${OIDC_DISCOVERY_URL}" | jq -r '.token_endpoint // empty')
-                      if [[ -z "$TOKEN_ENDPOINT" ]]; then
-                        log "FAIL  could not discover token endpoint from ${OIDC_ISSUER_URL}"
-                        FAILURES=$((FAILURES + 1))
-                      elif [[ "${TOKEN_ENDPOINT}" != https://* ]]; then
-                        log "FAIL  discovered token endpoint must use HTTPS, got: ${TOKEN_ENDPOINT}"
+                      TOKEN=$(curl --proto '=https' -sf --max-time 10 -X POST "${OIDC_ISSUER_URL}" -d "grant_type=client_credentials" --data-urlencode "client_id=${OIDC_CLIENT_ID}" --data-urlencode "client_secret=${OIDC_CLIENT_SECRET}" | jq -r '.access_token // empty')
+                      if [[ -z "$TOKEN" ]]; then
+                        log "FAIL  could not fetch OIDC access token from ${OIDC_ISSUER_URL}"
                         FAILURES=$((FAILURES + 1))
                       else
-                        TOKEN=$(curl --proto '=https' -sf --max-time 10 -X POST "${TOKEN_ENDPOINT}" -d "grant_type=client_credentials" --data-urlencode "client_id=${OIDC_CLIENT_ID}" --data-urlencode "client_secret=${OIDC_CLIENT_SECRET}" | jq -r '.access_token // empty')
-                        if [[ -z "$TOKEN" ]]; then
-                          log "FAIL  could not fetch OIDC access token"
-                          FAILURES=$((FAILURES + 1))
-                        else
-                          log "PASS  OIDC token fetched"
-                          THANOS_AUTH_HEADER="Authorization: Bearer ${TOKEN}"
-                        fi
+                        log "PASS  OIDC token fetched"
+                        THANOS_AUTH_HEADER="Authorization: Bearer ${TOKEN}"
                       fi
                     fi
                   else
