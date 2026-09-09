@@ -92,18 +92,26 @@ objects:
                   log "--- Thanos Auth ---"
                   THANOS_AUTH_HEADER=""
                   if [[ -n "${OIDC_CLIENT_ID}" && -n "${OIDC_CLIENT_SECRET}" && -n "${OIDC_ISSUER_URL}" ]]; then
-                    TOKEN_ENDPOINT=$(curl -sf --max-time 10 "${OIDC_ISSUER_URL}/.well-known/openid-configuration" | jq -r '.token_endpoint // empty')
-                    if [[ -z "$TOKEN_ENDPOINT" ]]; then
-                      log "FAIL  could not discover token endpoint from ${OIDC_ISSUER_URL}"
+                    if [[ "${OIDC_ISSUER_URL}" != https://* ]]; then
+                      log "FAIL  OIDC_ISSUER_URL must use HTTPS, got: ${OIDC_ISSUER_URL}"
                       FAILURES=$((FAILURES + 1))
                     else
-                      TOKEN=$(curl -sf --max-time 10 -X POST "${TOKEN_ENDPOINT}"                         -d "grant_type=client_credentials"                         --data-urlencode "client_id=${OIDC_CLIENT_ID}"                         --data-urlencode "client_secret=${OIDC_CLIENT_SECRET}" | jq -r '.access_token // empty')
-                      if [[ -z "$TOKEN" ]]; then
-                        log "FAIL  could not fetch OIDC access token"
+                      TOKEN_ENDPOINT=$(curl --proto '=https' -sf --max-time 10                         "${OIDC_ISSUER_URL}/.well-known/openid-configuration" | jq -r '.token_endpoint // empty')
+                      if [[ -z "$TOKEN_ENDPOINT" ]]; then
+                        log "FAIL  could not discover token endpoint from ${OIDC_ISSUER_URL}"
+                        FAILURES=$((FAILURES + 1))
+                      elif [[ "${TOKEN_ENDPOINT}" != https://* ]]; then
+                        log "FAIL  discovered token endpoint must use HTTPS, got: ${TOKEN_ENDPOINT}"
                         FAILURES=$((FAILURES + 1))
                       else
-                        log "PASS  OIDC token fetched"
-                        THANOS_AUTH_HEADER="Authorization: Bearer ${TOKEN}"
+                        TOKEN=$(curl --proto '=https' -sf --max-time 10 -X POST "${TOKEN_ENDPOINT}"                           -d "grant_type=client_credentials"                           --data-urlencode "client_id=${OIDC_CLIENT_ID}"                           --data-urlencode "client_secret=${OIDC_CLIENT_SECRET}" | jq -r '.access_token // empty')
+                        if [[ -z "$TOKEN" ]]; then
+                          log "FAIL  could not fetch OIDC access token"
+                          FAILURES=$((FAILURES + 1))
+                        else
+                          log "PASS  OIDC token fetched"
+                          THANOS_AUTH_HEADER="Authorization: Bearer ${TOKEN}"
+                        fi
                       fi
                     fi
                   else
@@ -113,8 +121,10 @@ objects:
                   echo ""
                   log "--- Probe Data Flowing (Thanos) ---"
                   THANOS_CURL_OPTS=(-fsSL --retry 3 --retry-delay 5 --max-time 10)
-                  if [[ -n "$THANOS_AUTH_HEADER" ]]; then
+                  if [[ -n "$THANOS_AUTH_HEADER" && "${THANOS_URL}" == https://* ]]; then
                     THANOS_CURL_OPTS+=(-H "$THANOS_AUTH_HEADER")
+                  elif [[ -n "$THANOS_AUTH_HEADER" ]]; then
+                    log "WARN  THANOS_URL is not HTTPS; skipping bearer token to avoid credential exposure"
                   fi
                   PROBE_COUNT="0"
                   THANOS_REACHABLE=false
