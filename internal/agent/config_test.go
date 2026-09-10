@@ -82,6 +82,10 @@ func TestLoadConfig_Defaults(t *testing.T) {
 	if cfg.GracefulTimeout != 30*time.Second {
 		t.Errorf("Expected default GracefulTimeout to be 30s, got %v", cfg.GracefulTimeout)
 	}
+
+	if !cfg.LeaderElect {
+		t.Error("Expected default LeaderElect to be true")
+	}
 }
 
 func TestLoadConfig_EnvironmentVariables(t *testing.T) {
