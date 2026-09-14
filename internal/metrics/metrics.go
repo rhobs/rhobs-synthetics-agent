@@ -85,6 +85,13 @@ var (
 		},
 		[]string{"version", "namespace"},
 	)
+
+	isLeader = prometheus.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "rhobs_synthetics_agent_is_leader",
+			Help: "Whether this instance currently holds the leader lease (1=leader, 0=standby)",
+		},
+	)
 )
 
 func init() {
@@ -98,6 +105,7 @@ func init() {
 		reconciliationTotal,
 		lastReconciliationTime,
 		agentInfo,
+		isLeader,
 	)
 }
 
@@ -149,6 +157,15 @@ func RecordReconciliation(duration time.Duration, success bool) {
 // SetAgentInfo sets agent information metrics
 func SetAgentInfo(version, namespace string) {
 	agentInfo.WithLabelValues(version, namespace).Set(1)
+}
+
+// SetLeader sets the leader election gauge.
+func SetLeader(leader bool) {
+	if leader {
+		isLeader.Set(1)
+	} else {
+		isLeader.Set(0)
+	}
 }
 
 // Handler returns the Prometheus metrics HTTP handler

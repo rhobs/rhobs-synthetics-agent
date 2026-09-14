@@ -46,7 +46,7 @@ The following table lists the most important configurable parameters:
 | `PROBE_NAMESPACE` | Namespace where probe resources will be created | `"rhobs"` |
 | `POLLING_INTERVAL` | How often to poll APIs | `"30s"` |
 | `LOG_LEVEL` | Log level (debug, info, warn, error) | `"info"` |
-| `REPLICA_COUNT` | Number of replicas | `"1"` |
+| `REPLICA_COUNT` | Number of replicas | `"2"` |
 | `CPU_LIMIT` / `MEMORY_LIMIT` | Resource limits | `500m` / `512Mi` |
 
 ### Namespace Configuration
