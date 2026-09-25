@@ -85,6 +85,29 @@ func TestWorkerResetsFetchFailureCountAfterSuccess(t *testing.T) {
 	}
 }
 
+func TestWorkerCancellationDoesNotTriggerFetchFailureHandoff(t *testing.T) {
+	var fetches atomic.Int32
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	w := haWorker(t, func(req *http.Request) (*http.Response, error) {
+		if fetches.Add(1) == 7 {
+			cancel()
+		}
+		if err := req.Context().Err(); err != nil {
+			return nil, err
+		}
+		return nil, &net.DNSError{Err: "i/o timeout", Name: req.URL.Hostname(), IsTimeout: true}
+	})
+
+	err := w.Start(ctx, &sync.WaitGroup{}, make(chan struct{}))
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("worker should stop because its context was canceled, got %v", err)
+	}
+	if got := fetches.Load(); got != 9 {
+		t.Fatalf("got %d fetches, want three complete cycles before cancellation", got)
+	}
+}
+
 func TestLeaderCallbacksStopElectionWhenAPIStaysUnavailable(t *testing.T) {
 	a, err := New(&Config{PollingInterval: 20 * time.Millisecond, LeaderElect: true})
 	if err != nil {

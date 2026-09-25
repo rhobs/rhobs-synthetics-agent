@@ -193,6 +193,9 @@ func (w *Worker) Start(ctx context.Context, taskWG *sync.WaitGroup, shutdownChan
 	consecutiveFetchFailures := 0
 	runProbeCycle := func() error {
 		err := w.processProbes(ctx, taskWG, shutdownChan)
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return ctxErr
+		}
 		if errors.Is(err, errAllProbeListsFailed) {
 			consecutiveFetchFailures++
 			if w.config.LeaderElect && consecutiveFetchFailures >= consecutiveFetchFailuresToYield {
