@@ -52,6 +52,10 @@ objects:
     - apiGroups: [""]
       resources: ["secrets"]
       verbs: ["get", "create", "update"]
+    # Leader election lease
+    - apiGroups: ["coordination.k8s.io"]
+      resources: ["leases"]
+      verbs: ["get", "list", "watch", "create", "update", "patch"]
 - apiVersion: rbac.authorization.k8s.io/v1
   kind: RoleBinding
   metadata:
@@ -145,8 +149,8 @@ objects:
     strategy:
       type: RollingUpdate
       rollingUpdate:
-        maxSurge: 1
-        maxUnavailable: 0
+        maxSurge: 0
+        maxUnavailable: 1
     selector:
       matchLabels:
         app.kubernetes.io/component: synthetics-agent
@@ -162,6 +166,16 @@ objects:
           app.kubernetes.io/part-of: rhobs
       spec:
         serviceAccountName: ${APPLICATION_NAME}
+        affinity:
+          podAntiAffinity:
+            requiredDuringSchedulingIgnoredDuringExecution:
+              - labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/component: synthetics-agent
+                    app.kubernetes.io/instance: rhobs
+                    app.kubernetes.io/name: synthetics-agent
+                    app.kubernetes.io/part-of: rhobs
+                topologyKey: kubernetes.io/hostname
         containers:
           - name: synthetics-agent
             image: quay.io/redhat-services-prod/openshift/rhobs-synthetics-agent:${IMAGE_TAG}
@@ -191,6 +205,10 @@ objects:
               initialDelaySeconds: 5
               periodSeconds: 10
             env:
+              - name: POD_NAME
+                valueFrom:
+                  fieldRef:
+                    fieldPath: metadata.name
               - name: NAMESPACE
                 valueFrom:
                   fieldRef:
@@ -344,7 +362,7 @@ parameters:
 - name: REPLICA_COUNT
   displayName: Replica Count
   description: Number of replicas to deploy
-  value: "1"
+  value: "2"
   required: true
 - name: CPU_REQUEST
   displayName: CPU Request

@@ -87,6 +87,7 @@ func main() {
 	startCmd.Flags().String("prometheus-memory-limits", "1Gi", "Memory limits for Prometheus pod")
 	startCmd.Flags().String("prometheus-managed-by-operator", "observability-operator", "Value for app.kubernetes.io/managed-by label on Prometheus resources")
 	startCmd.Flags().String("prometheus-api-group", "", "API group for Prometheus and Probe CRs (monitoring.rhobs or monitoring.coreos.com). Auto-detected if empty.")
+	startCmd.Flags().Bool("leader-elect", true, "Enable leader election for safe multi-replica operation")
 
 	// Bind flags to viper
 	_ = viper.BindPFlag("config", startCmd.Flags().Lookup("config"))
@@ -107,6 +108,7 @@ func main() {
 	_ = viper.BindPFlag("prometheus.memory_limits", startCmd.Flags().Lookup("prometheus-memory-limits"))
 	_ = viper.BindPFlag("prometheus.managed_by_operator", startCmd.Flags().Lookup("prometheus-managed-by-operator"))
 	_ = viper.BindPFlag("prometheus.api_group", startCmd.Flags().Lookup("prometheus-api-group"))
+	_ = viper.BindPFlag("leader_elect", startCmd.Flags().Lookup("leader-elect"))
 
 	// Add commands to the root command
 	rootCmd.AddCommand(startCmd)

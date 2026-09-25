@@ -201,6 +201,15 @@ func (pm *ProbeManager) SetProbeAPIGroup(apiGroup string) {
 
 // CreateProbeK8sResource creates or updates a Probe Custom Resource in Kubernetes
 func (pm *ProbeManager) CreateProbeK8sResource(probe api.Probe, config BlackboxProbingConfig) error {
+	return pm.CreateProbeK8sResourceWithContext(context.Background(), probe, config)
+}
+
+// CreateProbeK8sResourceWithContext stops the Kubernetes write if this agent
+// loses leadership while reconciling the probe.
+func (pm *ProbeManager) CreateProbeK8sResourceWithContext(ctx context.Context, probe api.Probe, config BlackboxProbingConfig) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	// Check if we can create Kubernetes resources
 	if !pm.isK8sCluster() {
 		return fmt.Errorf("not running in a Kubernetes cluster")
@@ -239,7 +248,7 @@ func (pm *ProbeManager) CreateProbeK8sResource(probe api.Probe, config BlackboxP
 		Resource: "probes",
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
 	// Try to create the resource in Kubernetes
@@ -315,6 +324,14 @@ func (pm *ProbeManager) updateProbeK8sResource(ctx context.Context, probeGVR sch
 
 // DeleteProbeK8sResource deletes a Probe Custom Resource from Kubernetes
 func (pm *ProbeManager) DeleteProbeK8sResource(probe api.Probe) error {
+	return pm.DeleteProbeK8sResourceWithContext(context.Background(), probe)
+}
+
+// DeleteProbeK8sResourceWithContext stops deletion on leadership loss.
+func (pm *ProbeManager) DeleteProbeK8sResourceWithContext(ctx context.Context, probe api.Probe) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	// Check if we can interact with Kubernetes resources
 	if !pm.isK8sCluster() {
 		return fmt.Errorf("not running in a Kubernetes cluster")
@@ -337,7 +354,7 @@ func (pm *ProbeManager) DeleteProbeK8sResource(probe api.Probe) error {
 		Resource: "probes",
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
 	// Construct the probe name using deterministic cluster-id based naming.
@@ -374,6 +391,14 @@ func (pm *ProbeManager) DeleteProbeK8sResource(probe api.Probe) error {
 
 // ListManagedProbeCRNames returns the names of all Probe CRs managed by this agent.
 func (pm *ProbeManager) ListManagedProbeCRNames() ([]string, error) {
+	return pm.ListManagedProbeCRNamesWithContext(context.Background())
+}
+
+// ListManagedProbeCRNamesWithContext stops listing when leadership is lost.
+func (pm *ProbeManager) ListManagedProbeCRNamesWithContext(ctx context.Context) ([]string, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if !pm.isK8sCluster() || pm.probeAPIGroup == "" || pm.dynamicClient == nil {
 		return nil, nil
 	}
@@ -384,7 +409,7 @@ func (pm *ProbeManager) ListManagedProbeCRNames() ([]string, error) {
 		Resource: "probes",
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
 	list, err := pm.dynamicClient.Resource(probeGVR).Namespace(pm.namespace).List(

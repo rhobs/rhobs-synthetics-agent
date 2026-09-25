@@ -2,12 +2,14 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
 	"os"
 	"os/signal"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -15,18 +17,24 @@ import (
 	"github.com/rhobs/rhobs-synthetics-agent/internal/logger"
 	"github.com/rhobs/rhobs-synthetics-agent/internal/metrics"
 	"github.com/rhobs/rhobs-synthetics-agent/internal/version"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/client-go/tools/leaderelection"
+	"k8s.io/client-go/tools/leaderelection/resourcelock"
 )
 
 type Agent struct {
-	config          *Config
-	worker          *Worker
-	taskWG          sync.WaitGroup
-	shutdownChan    chan struct{}
-	shutdownOnce    sync.Once
-	ready           bool
-	readyMu         sync.RWMutex
-	metricsAddr     string
-	metricsReady    chan struct{}
+	config       *Config
+	worker       *Worker
+	taskWG       sync.WaitGroup
+	shutdownChan chan struct{}
+	shutdownOnce sync.Once
+	ready        bool
+	readyMu      sync.RWMutex
+	metricsAddr  string
+	metricsReady chan struct{}
 }
 
 func New(cfg *Config) (*Agent, error) {
@@ -43,11 +51,11 @@ func New(cfg *Config) (*Agent, error) {
 	metrics.SetAgentInfo(version.Version, namespace)
 
 	agent := &Agent{
-		config:          cfg,
-		worker:          worker,
-		shutdownChan:    make(chan struct{}),
-		metricsReady:    make(chan struct{}),
-		ready:           false,
+		config:       cfg,
+		worker:       worker,
+		shutdownChan: make(chan struct{}),
+		metricsReady: make(chan struct{}),
+		ready:        false,
 	}
 
 	// Set readiness callback for the worker
@@ -97,16 +105,30 @@ func (a *Agent) Run() error {
 		})
 	}
 
-	// Main worker goroutine
+	// Main worker goroutine (with optional leader election)
 	{
 		ctx, cancel := context.WithCancel(context.Background())
-		g.Add(func() error {
-			return a.worker.Start(ctx, &a.taskWG, a.shutdownChan)
-		}, func(error) {
-			logger.Info("shutting down worker")
-			a.setReady(false)
-			cancel()
-		})
+		if a.config != nil && a.config.LeaderElect {
+			// Readiness is process health (able to serve probes / participate in
+			// election), not "last reconcile succeeded". Ignore the worker callback
+			// so a failed processProbes cycle cannot flip /readyz and stall rollouts.
+			a.worker.SetReadinessCallback(func(bool) {})
+			g.Add(func() error {
+				return a.runWithLeaderElection(ctx)
+			}, func(error) {
+				logger.Info("shutting down leader election")
+				a.setReady(false)
+				cancel()
+			})
+		} else {
+			g.Add(func() error {
+				return a.worker.Start(ctx, &a.taskWG, a.shutdownChan)
+			}, func(error) {
+				logger.Info("shutting down worker")
+				a.setReady(false)
+				cancel()
+			})
+		}
 	}
 
 	// Metrics server
@@ -150,7 +172,7 @@ func (a *Agent) startMetricsServer(ctx context.Context) error {
 	mux.Handle("/metrics", metrics.Handler())
 	mux.HandleFunc("/livez", a.handleLiveness)
 	mux.HandleFunc("/readyz", a.handleReadiness)
-	
+
 	addr := ":8080"
 	if a.config != nil && a.config.MetricsAddr != "" {
 		addr = a.config.MetricsAddr
@@ -181,7 +203,7 @@ func (a *Agent) startMetricsServer(ctx context.Context) error {
 	if err := server.Serve(ln); err != nil && err != http.ErrServerClosed {
 		return fmt.Errorf("metrics server failed: %w", err)
 	}
-	
+
 	return nil
 }
 
@@ -190,6 +212,190 @@ func (a *Agent) setReady(ready bool) {
 	a.readyMu.Lock()
 	defer a.readyMu.Unlock()
 	a.ready = ready
+}
+
+const (
+	leaseName     = "synthetics-agent"
+	leaseDuration = 15 * time.Second
+	renewDeadline = 10 * time.Second
+	retryPeriod   = 2 * time.Second
+)
+
+// acquisitionTrackingLock records whether this process ever owned the Lease.
+// GetLeader can report a different holder by the time Run returns, so it
+// cannot tell us whether we must wait for our own worker to finish.
+type acquisitionTrackingLock struct {
+	resourcelock.Interface
+	acquired atomic.Bool
+}
+
+func (l *acquisitionTrackingLock) Create(ctx context.Context, record resourcelock.LeaderElectionRecord) error {
+	err := l.Interface.Create(ctx, record)
+	if err == nil && record.HolderIdentity == l.Identity() {
+		l.acquired.Store(true)
+	}
+	return err
+}
+
+func (l *acquisitionTrackingLock) Update(ctx context.Context, record resourcelock.LeaderElectionRecord) error {
+	err := l.Interface.Update(ctx, record)
+	if err == nil && record.HolderIdentity == l.Identity() {
+		l.acquired.Store(true)
+	}
+	return err
+}
+
+func (a *Agent) runWithLeaderElection(ctx context.Context) error {
+	var restCfg *rest.Config
+	var err error
+	if a.config != nil && a.config.KubeConfig != "" {
+		restCfg, err = clientcmd.BuildConfigFromFlags("", a.config.KubeConfig)
+	} else {
+		restCfg, err = rest.InClusterConfig()
+	}
+	if err != nil {
+		return fmt.Errorf("failed to build kubernetes config for leader election: %w", err)
+	}
+
+	clientset, err := kubernetes.NewForConfig(restCfg)
+	if err != nil {
+		return fmt.Errorf("failed to create kubernetes client for leader election: %w", err)
+	}
+
+	id := os.Getenv("POD_NAME")
+	if id == "" {
+		id, err = os.Hostname()
+		if err != nil {
+			return fmt.Errorf("failed to determine pod identity: %w", err)
+		}
+	}
+
+	namespace := "default"
+	if envNS := os.Getenv("NAMESPACE"); envNS != "" {
+		namespace = envNS
+	} else if a.config != nil && a.config.Namespace != "" {
+		namespace = a.config.Namespace
+	}
+
+	return a.runLeaderElection(ctx, clientset, id, namespace, nil)
+}
+
+// runLeaderElection runs the elector after the Kubernetes client and identity
+// are known. Extracted so tests can inject a fake clientset.
+func (a *Agent) runLeaderElection(ctx context.Context, clientset kubernetes.Interface, id, namespace string, lock resourcelock.Interface) error {
+	if lock == nil {
+		lock = &resourcelock.LeaseLock{
+			LeaseMeta: metav1.ObjectMeta{
+				Name:      leaseName,
+				Namespace: namespace,
+			},
+			Client: clientset.CoordinationV1(),
+			LockConfig: resourcelock.ResourceLockConfig{
+				Identity: id,
+			},
+		}
+	}
+
+	// Verify lease RBAC before entering the leader election loop. If the
+	// service account cannot access leases, fail fast and loudly instead of
+	// either hanging forever (the leader elector retries indefinitely) or
+	// silently running the worker unsupervised: if every replica hit this
+	// same RBAC error, falling back to worker.Start() on all of them would
+	// mean multiple unsupervised reconcilers racing on the same Probe CRs -
+	// exactly the split-brain behavior leader election exists to prevent.
+	// A missing Lease permission is a deployment misconfiguration that
+	// should be fixed (see RBAC in templates/template.yaml), not masked.
+	if _, err := clientset.CoordinationV1().Leases(namespace).List(ctx, metav1.ListOptions{Limit: 1}); err != nil {
+		return fmt.Errorf("leader election RBAC check failed (missing coordination.k8s.io/leases permissions?): %w", err)
+	}
+
+	logger.Infof("Starting leader election (id=%s, namespace=%s)", id, namespace)
+
+	// The process is healthy and can participate in election. /readyz must not
+	// wait for lease acquisition or worker.Start: a standby never starts the
+	// worker, and a single replica still has to pass readiness for the
+	// Deployment to become available (maxSurge:0 / maxUnavailable:1).
+	a.setReady(true)
+	electionCtx, stopElection := context.WithCancel(ctx)
+	defer stopElection()
+	workerDone := make(chan error, 1)
+	trackedLock := &acquisitionTrackingLock{Interface: lock}
+
+	le, err := leaderelection.NewLeaderElector(leaderelection.LeaderElectionConfig{
+		Lock:          trackedLock,
+		LeaseDuration: leaseDuration,
+		RenewDeadline: renewDeadline,
+		RetryPeriod:   retryPeriod,
+		// The worker callback runs in a separate goroutine. Releasing the Lease
+		// here would let a new leader start before that worker has stopped.
+		ReleaseOnCancel: false,
+		Callbacks:       a.leaderCallbacks(id, stopElection, workerDone),
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create leader elector: %w", err)
+	}
+
+	le.Run(electionCtx)
+	if trackedLock.acquired.Load() {
+		// Run cancels the leader context when the Lease is lost, but does not
+		// wait for OnStartedLeading to return.
+		workerErr := <-workerDone
+		logger.Info("Leader reconciliation worker stopped")
+		if workerErr != nil && ctx.Err() == nil && !errors.Is(workerErr, context.Canceled) {
+			a.setReady(false)
+			// A pod with broken access to the synthetics API must not restart
+			// and reacquire the Lease before a healthy standby can take over.
+			timer := time.NewTimer(leaseDuration + retryPeriod)
+			defer timer.Stop()
+			select {
+			case <-timer.C:
+			case <-ctx.Done():
+			}
+			return fmt.Errorf("leader worker stopped: %w", workerErr)
+		}
+	}
+	return nil
+}
+
+func (a *Agent) leaderCallbacks(id string, stopElection context.CancelFunc, workerDone chan<- error) leaderelection.LeaderCallbacks {
+	return leaderelection.LeaderCallbacks{
+		OnStartedLeading: func(leaderCtx context.Context) {
+			logger.Info("Acquired leader lease, starting reconciliation")
+			metrics.SetLeader(true)
+			a.setReady(true)
+			err := a.worker.Start(leaderCtx, &a.taskWG, a.shutdownChan)
+			if err != nil && leaderCtx.Err() == nil {
+				logger.Errorf("Worker error: %v", err)
+				if stopElection != nil {
+					stopElection()
+				}
+			}
+			if workerDone != nil {
+				workerDone <- err
+			}
+		},
+		OnStoppedLeading: func() {
+			logger.Info("Lost leader lease, stopping reconciliation")
+			metrics.SetLeader(false)
+			// Do NOT flip readiness to false here: the process itself is
+			// still healthy and is simply returning to standby. Readiness
+			// reflects process health, not current leadership.
+			// Conflating the two would leave the standby permanently unready
+			// and can stall rolling updates (maxSurge:0/maxUnavailable:1 needs
+			// the standby to report Ready for the rollout to proceed).
+		},
+		OnNewLeader: func(identity string) {
+			if identity == id {
+				logger.Info("This instance is the leader")
+			} else {
+				logger.Infof("Current leader: %s", identity)
+			}
+			// Both leader and standby are healthy participants: connected to
+			// the API server and in the election loop. Mark ready so every
+			// replica counts toward availability during rollouts.
+			a.setReady(true)
+		},
+	}
 }
 
 // isReady returns the current readiness state
@@ -213,7 +419,7 @@ func (a *Agent) handleLiveness(w http.ResponseWriter, r *http.Request) {
 // Returns 200 OK only when the agent is initialized and ready to perform its duties
 func (a *Agent) handleReadiness(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain")
-	
+
 	if a.isReady() {
 		w.WriteHeader(http.StatusOK)
 		if _, err := w.Write([]byte("Ready")); err != nil {
