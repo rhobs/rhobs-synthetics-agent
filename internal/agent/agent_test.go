@@ -503,7 +503,7 @@ func TestLeaderCallbacks_ReadinessIndependentOfLeadership(t *testing.T) {
 		t.Fatalf("unexpected error creating agent: %v", err)
 	}
 
-	cbs := agent.leaderCallbacks("pod-1")
+	cbs := agent.leaderCallbacks("pod-1", nil, nil)
 
 	cbs.OnNewLeader("other-pod")
 	if !agent.isReady() {

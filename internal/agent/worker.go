@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"sync"
@@ -24,7 +25,12 @@ const (
 	// never establishes, we still want to generate probe data so the SLO alert
 	// fires for a real connectivity issue rather than being silently suppressed.
 	defaultPreflightTimeout = 10 * time.Minute
+	// One bad fetch can be a transient DNS failure. Three fully failed
+	// reconciliation cycles mean the leader should yield to the other pod.
+	consecutiveFetchFailuresToYield = 3
 )
+
+var errAllProbeListsFailed = errors.New("all probe list fetches failed")
 
 type Worker struct {
 	config             *Config
@@ -184,18 +190,41 @@ func (w *Worker) Start(ctx context.Context, taskWG *sync.WaitGroup, shutdownChan
 	ticker := time.NewTicker(w.config.PollingInterval)
 	defer ticker.Stop()
 
+	consecutiveFetchFailures := 0
+	runProbeCycle := func() error {
+		err := w.processProbes(ctx, taskWG, shutdownChan)
+		if errors.Is(err, errAllProbeListsFailed) {
+			consecutiveFetchFailures++
+			if w.config.LeaderElect && consecutiveFetchFailures >= consecutiveFetchFailuresToYield {
+				return fmt.Errorf("synthetics API unavailable for %d consecutive cycles: %w", consecutiveFetchFailures, err)
+			}
+		} else {
+			consecutiveFetchFailures = 0
+		}
+		return err
+	}
+
 	// Reconcile operands before contacting the Probe APIs. API requests can take
 	// up to their client timeout, but the blackbox exporter must be available for
 	// probe pre-flight checks and Prometheus must be ready to scrape the results.
 	if err := w.processProbers(ctx, shutdownChan); err != nil {
 		logger.Errorf("failed to manage prober operands: %v\n", err)
 	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if err := w.processPrometheus(ctx, shutdownChan); err != nil {
 		logger.Errorf("failed to manage prometheus instance: %v\n", err)
 	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 
 	// Initial probe reconciliation.
-	if err := w.processProbes(ctx, taskWG, shutdownChan); err != nil {
+	if err := runProbeCycle(); err != nil {
+		if errors.Is(err, errAllProbeListsFailed) && consecutiveFetchFailures >= consecutiveFetchFailuresToYield && w.config.LeaderElect {
+			return err
+		}
 		logger.Errorf("initial work failed: %v\n", err)
 		w.readinessCallback(false)
 	} else if len(w.apiClients) > 0 {
@@ -215,10 +244,19 @@ func (w *Worker) Start(ctx context.Context, taskWG *sync.WaitGroup, shutdownChan
 			if err := w.processProbers(ctx, shutdownChan); err != nil {
 				logger.Errorf("failed to manage prober operands: %v\n", err)
 			}
+			if err := ctx.Err(); err != nil {
+				return err
+			}
 			if err := w.processPrometheus(ctx, shutdownChan); err != nil {
 				logger.Errorf("failed to manage prometheus instance: %v\n", err)
 			}
-			if err := w.processProbes(ctx, taskWG, shutdownChan); err != nil {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			if err := runProbeCycle(); err != nil {
+				if errors.Is(err, errAllProbeListsFailed) && consecutiveFetchFailures >= consecutiveFetchFailuresToYield && w.config.LeaderElect {
+					return err
+				}
 				logger.Errorf("work iteration failed: %v\n", err)
 				// Continue running even if one iteration fails
 			}
@@ -246,20 +284,24 @@ func (w *Worker) processProbes(ctx context.Context, taskWG *sync.WaitGroup, shut
 		return nil
 	}
 
+	failedFetches := 0
 	if err := w.createProbes(ctx, shutdownChan); err != nil {
 		logger.Infof("error processing probes with status=pending: %v", err)
+		failedFetches++
 	} else {
 		logger.Infof("successfully processed probes with status=pending")
 	}
 
 	if err := w.reconcileActiveProbes(ctx, shutdownChan); err != nil {
 		logger.Infof("error reconciling probes with status=active: %v", err)
+		failedFetches++
 	} else {
 		logger.Infof("successfully reconciled probes with status=active")
 	}
 
 	if err := w.deleteProbe(ctx, shutdownChan); err != nil {
 		logger.Infof("error processing probes with status=terminating: %v", err)
+		failedFetches++
 	} else {
 		logger.Infof("successfully processed probes with status=terminating")
 	}
@@ -270,6 +312,10 @@ func (w *Worker) processProbes(ctx context.Context, taskWG *sync.WaitGroup, shut
 		logger.Infof("successfully cleaned up orphaned Probe CRs")
 	}
 
+	if failedFetches == 3 {
+		reconciliationErr = errAllProbeListsFailed
+		return reconciliationErr
+	}
 	return nil
 }
 
@@ -294,7 +340,7 @@ func (w *Worker) fetchProbeList(ctx context.Context, selector string) ([]api.Pro
 		logger.Infof("Fetching probes from API endpoint %d/%d", i+1, len(w.apiClients))
 
 		fetchStart := time.Now()
-		probes, err := apiClient.GetProbes(labelSelector)
+		probes, err := apiClient.GetProbesWithContext(ctx, labelSelector)
 		fetchDuration := time.Since(fetchStart)
 
 		apiEndpoint := fmt.Sprintf("endpoint_%d", i+1)
@@ -339,11 +385,15 @@ func (w *Worker) deduplicateProbes(probes []api.Probe) []api.Probe {
 
 // updateProbeStatus updates the probe status on all API clients that might have this probe
 func (w *Worker) updateProbeStatus(probeID, status string) {
+	w.updateProbeStatusWithContext(context.Background(), probeID, status)
+}
+
+func (w *Worker) updateProbeStatusWithContext(ctx context.Context, probeID, status string) {
 	var errors []error
 	successCount := 0
 
 	for i, apiClient := range w.apiClients {
-		if err := apiClient.UpdateProbeStatus(probeID, status); err != nil {
+		if err := apiClient.UpdateProbeStatusWithContext(ctx, probeID, status); err != nil {
 			logger.Infof("Failed to update probe %s status on API endpoint %d: %v", probeID, i+1, err)
 			errors = append(errors, err)
 		} else {
@@ -381,6 +431,8 @@ func (w *Worker) createProbes(ctx context.Context, shutdownChan chan struct{}) e
 	// Process each probe
 	for _, probe := range probes {
 		select {
+		case <-ctx.Done():
+			return ctx.Err()
 		case <-shutdownChan:
 			logger.Info("shutdown in progress, stopping probe processing")
 			return nil
@@ -424,13 +476,15 @@ func (w *Worker) reconcileActiveProbes(ctx context.Context, shutdownChan chan st
 	// Reconcile each active probe - CreateProbeK8sResource will update if exists
 	for _, probe := range probes {
 		select {
+		case <-ctx.Done():
+			return ctx.Err()
 		case <-shutdownChan:
 			logger.Info("shutdown in progress, stopping probe reconciliation")
 			return nil
 		default:
 		}
 
-		err := w.probeManager.CreateProbeK8sResource(probe, w.config.Blackbox.Probing)
+		err := w.probeManager.CreateProbeK8sResourceWithContext(ctx, probe, w.config.Blackbox.Probing)
 		if err != nil {
 			logger.Debugf("Failed to reconcile probe %s: %v", probe.ID, err)
 			metrics.RecordProbeResourceOperation("reconcile", false)
@@ -452,6 +506,9 @@ func (w *Worker) processProbers(ctx context.Context, shutdownChan chan struct{})
 		logger.Warn("no probers to manage")
 	}
 	for _, shard := range shards {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		logger.Infof("reconciling prober %q", shard)
 		err := w.manageProber(ctx, shard)
 		if err != nil {
@@ -485,6 +542,9 @@ func (w *Worker) manageProber(ctx context.Context, name string) error {
 
 // createProbe processes a single probe (extracted for testing)
 func (w *Worker) createProbe(ctx context.Context, probe api.Probe) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	logger.Infof("Processing probe %s with target URL: %s", probe.ID, probe.StaticURL)
 
 	if !w.probeManager.CheckConnectivity(ctx, probe.StaticURL, w.config.Blackbox.Probing) {
@@ -509,14 +569,14 @@ func (w *Worker) createProbe(ctx context.Context, probe api.Probe) error {
 	delete(w.preflightFirstSeen, probe.ID)
 
 	// Try to create the probe Custom Resource in Kubernetes
-	err := w.probeManager.CreateProbeK8sResource(probe, w.config.Blackbox.Probing)
+	err := w.probeManager.CreateProbeK8sResourceWithContext(ctx, probe, w.config.Blackbox.Probing)
 	if err != nil {
 		// If K8s creation fails, fall back to logging the resource definition
 		logger.Infof("Failed to create Kubernetes resource (falling back to logging): %v", err)
 
 		cr, crErr := w.probeManager.CreateProbeResource(probe, w.config.Blackbox.Probing)
 		if crErr != nil {
-			w.updateProbeStatus(probe.ID, "failed")
+			w.updateProbeStatusWithContext(ctx, probe.ID, "failed")
 			return fmt.Errorf("failed to create probe resource definition: %w", crErr)
 		}
 
@@ -528,10 +588,10 @@ func (w *Worker) createProbe(ctx context.Context, probe api.Probe) error {
 		}
 
 		logger.Infof("Probe %s processed (logged only - not running in compatible K8s cluster)", probe.ID)
-		w.updateProbeStatus(probe.ID, "active")
+		w.updateProbeStatusWithContext(ctx, probe.ID, "active")
 	} else {
 		logger.Infof("Successfully created monitoring.coreos.com/v1 Probe resource for probe %s", probe.ID)
-		w.updateProbeStatus(probe.ID, "active")
+		w.updateProbeStatusWithContext(ctx, probe.ID, "active")
 	}
 	return nil
 }
@@ -549,6 +609,8 @@ func (w *Worker) deleteProbe(ctx context.Context, shutdownChan chan struct{}) er
 	for _, probe := range probes {
 		logger.Infof("Deleting probe %s with target URL: %s", probe.ID, probe.StaticURL)
 		select {
+		case <-ctx.Done():
+			return ctx.Err()
 		case <-shutdownChan:
 			logger.Info("shutdown in progress, reattempting probe deletion")
 			return nil
@@ -556,14 +618,14 @@ func (w *Worker) deleteProbe(ctx context.Context, shutdownChan chan struct{}) er
 		}
 
 		// Try to delete CR, but don't fail if it's already gone
-		err := w.probeManager.DeleteProbeK8sResource(probe)
+		err := w.probeManager.DeleteProbeK8sResourceWithContext(ctx, probe)
 		if err != nil {
 			logger.Warnf("Could not delete Kubernetes CR for probe %s: %v", probe.ID, err)
 			// Continue anyway - API is source of truth
 		}
 
 		// Always try to clean up from API
-		err = w.apiClients[0].DeleteProbe(probe.ID)
+		err = w.apiClients[0].DeleteProbeWithContext(ctx, probe.ID)
 		if err != nil {
 			logger.Errorf("Failed to delete probe %s from API: %v", probe.ID, err)
 			// Continue to next probe instead of failing entire batch
@@ -579,7 +641,7 @@ func (w *Worker) deleteProbe(ctx context.Context, shutdownChan chan struct{}) er
 // are removed without going through the terminating flow.
 func (w *Worker) cleanupOrphanedCRs(ctx context.Context, shutdownChan chan struct{}) error {
 	// List all managed Probe CRs
-	crNames, err := w.probeManager.ListManagedProbeCRNames()
+	crNames, err := w.probeManager.ListManagedProbeCRNamesWithContext(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to list managed Probe CRs: %w", err)
 	}
@@ -606,6 +668,8 @@ func (w *Worker) cleanupOrphanedCRs(ctx context.Context, shutdownChan chan struc
 	orphaned := 0
 	for _, name := range crNames {
 		select {
+		case <-ctx.Done():
+			return ctx.Err()
 		case <-shutdownChan:
 			logger.Info("shutdown in progress, stopping orphan cleanup")
 			return nil
@@ -617,7 +681,7 @@ func (w *Worker) cleanupOrphanedCRs(ctx context.Context, shutdownChan chan struc
 		}
 
 		logger.Infof("Deleting orphaned Probe CR %s (not in API)", name)
-		err := w.probeManager.DeleteProbeK8sResource(api.Probe{ID: name[len("probe-"):]})
+		err := w.probeManager.DeleteProbeK8sResourceWithContext(ctx, api.Probe{ID: name[len("probe-"):]})
 		if err != nil {
 			logger.Warnf("Failed to delete orphaned Probe CR %s: %v", name, err)
 			continue

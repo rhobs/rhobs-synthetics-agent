@@ -21,15 +21,15 @@ import (
 
 // RealAPIManager manages the lifecycle of the actual RHOBS Synthetics API server
 type RealAPIManager struct {
-	cmd         *exec.Cmd
-	apiURL      string
-	port        int
-	dataDir     string
-	apiPath     string
-	stopChan    chan struct{}
-	started     bool
-	ctx         context.Context
-	cancel      context.CancelFunc
+	cmd      *exec.Cmd
+	apiURL   string
+	port     int
+	dataDir  string
+	apiPath  string
+	stopChan chan struct{}
+	started  bool
+	ctx      context.Context
+	cancel   context.CancelFunc
 }
 
 // NewRealAPIManager creates a new manager for the real API server
@@ -44,7 +44,6 @@ func NewRealAPIManager() *RealAPIManager {
 
 	return &RealAPIManager{
 		port:     8080,
-		dataDir:  "/tmp/rhobs-synthetics-api-test-data",
 		apiPath:  apiPath,
 		stopChan: make(chan struct{}),
 		ctx:      ctx,
@@ -63,13 +62,16 @@ func (m *RealAPIManager) Start() error {
 		return fmt.Errorf("failed to build API: %w", err)
 	}
 
-	// Create data directory
-	if err := os.MkdirAll(m.dataDir, 0755); err != nil {
+	// Use a fresh directory for each run so stale probes cannot affect tests.
+	dataDir, err := os.MkdirTemp("", "rhobs-synthetics-api-test-data-")
+	if err != nil {
 		return fmt.Errorf("failed to create data directory: %w", err)
 	}
+	m.dataDir = dataDir
 
 	// Find an available port
 	if err := m.findAvailablePort(); err != nil {
+		_ = m.Stop()
 		return fmt.Errorf("failed to find available port: %w", err)
 	}
 
@@ -77,8 +79,10 @@ func (m *RealAPIManager) Start() error {
 
 	// Start the API server
 	if err := m.startAPI(); err != nil {
+		_ = m.Stop()
 		return fmt.Errorf("failed to start API: %w", err)
 	}
+	m.started = true
 
 	// Wait for API to be ready
 	if err := m.waitForAPI(); err != nil {
@@ -92,13 +96,17 @@ func (m *RealAPIManager) Start() error {
 		return fmt.Errorf("failed to seed test data: %w", err)
 	}
 
-	m.started = true
 	return nil
 }
 
 // Stop shuts down the API server
 func (m *RealAPIManager) Stop() error {
 	if !m.started {
+		if m.dataDir != "" {
+			err := os.RemoveAll(m.dataDir)
+			m.dataDir = ""
+			return err
+		}
 		return nil
 	}
 
@@ -115,10 +123,11 @@ func (m *RealAPIManager) Stop() error {
 	}
 
 	// Clean up data directory
-	_ = os.RemoveAll(m.dataDir)
+	err := os.RemoveAll(m.dataDir)
+	m.dataDir = ""
 
 	m.started = false
-	return nil
+	return err
 }
 
 // GetURL returns the API server URL
@@ -163,7 +172,10 @@ func (m *RealAPIManager) isPortAvailable(port int) bool {
 
 // startAPI starts the API server process
 func (m *RealAPIManager) startAPI() error {
-	binaryPath := filepath.Join(m.apiPath, "rhobs-synthetics-api")
+	binaryPath, err := filepath.Abs(filepath.Join(m.apiPath, "rhobs-synthetics-api"))
+	if err != nil {
+		return fmt.Errorf("failed to resolve API binary path: %w", err)
+	}
 
 	m.cmd = exec.CommandContext(m.ctx, binaryPath,
 		"start",
@@ -173,6 +185,9 @@ func (m *RealAPIManager) startAPI() error {
 		"--log-level", "debug",
 		"--graceful-timeout", "5s",
 	)
+	// The API's local store defaults to ./data. Keep that directory inside
+	// the test directory so previous test runs cannot affect this fixture.
+	m.cmd.Dir = m.dataDir
 
 	// Set up environment for development mode
 	m.cmd.Env = append(os.Environ(), "APP_ENV=dev")
@@ -249,16 +264,16 @@ func (m *RealAPIManager) SeedTestData() error {
 		{
 			staticURL: "https://httpbin.org/status/200",
 			labels: map[string]string{
-				"env":     "test",
-				"private": "false",
+				"env":                     "test",
+				"private":                 "false",
 				"rhobs-synthetics/status": "pending",
 			},
 		},
 		{
 			staticURL: "https://httpbin.org/get",
 			labels: map[string]string{
-				"env":     "test",
-				"private": "false",
+				"env":                     "test",
+				"private":                 "false",
 				"rhobs-synthetics/status": "pending",
 			},
 		},

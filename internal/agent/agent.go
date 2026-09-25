@@ -2,12 +2,14 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
 	"os"
 	"os/signal"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -219,6 +221,30 @@ const (
 	retryPeriod   = 2 * time.Second
 )
 
+// acquisitionTrackingLock records whether this process ever owned the Lease.
+// GetLeader can report a different holder by the time Run returns, so it
+// cannot tell us whether we must wait for our own worker to finish.
+type acquisitionTrackingLock struct {
+	resourcelock.Interface
+	acquired atomic.Bool
+}
+
+func (l *acquisitionTrackingLock) Create(ctx context.Context, record resourcelock.LeaderElectionRecord) error {
+	err := l.Interface.Create(ctx, record)
+	if err == nil && record.HolderIdentity == l.Identity() {
+		l.acquired.Store(true)
+	}
+	return err
+}
+
+func (l *acquisitionTrackingLock) Update(ctx context.Context, record resourcelock.LeaderElectionRecord) error {
+	err := l.Interface.Update(ctx, record)
+	if err == nil && record.HolderIdentity == l.Identity() {
+		l.acquired.Store(true)
+	}
+	return err
+}
+
 func (a *Agent) runWithLeaderElection(ctx context.Context) error {
 	var restCfg *rest.Config
 	var err error
@@ -290,35 +316,66 @@ func (a *Agent) runLeaderElection(ctx context.Context, clientset kubernetes.Inte
 	// worker, and a single replica still has to pass readiness for the
 	// Deployment to become available (maxSurge:0 / maxUnavailable:1).
 	a.setReady(true)
+	electionCtx, stopElection := context.WithCancel(ctx)
+	defer stopElection()
+	workerDone := make(chan error, 1)
+	trackedLock := &acquisitionTrackingLock{Interface: lock}
 
 	le, err := leaderelection.NewLeaderElector(leaderelection.LeaderElectionConfig{
-		Lock:            lock,
-		LeaseDuration:   leaseDuration,
-		RenewDeadline:   renewDeadline,
-		RetryPeriod:     retryPeriod,
-		ReleaseOnCancel: true,
-		Callbacks:       a.leaderCallbacks(id),
+		Lock:          trackedLock,
+		LeaseDuration: leaseDuration,
+		RenewDeadline: renewDeadline,
+		RetryPeriod:   retryPeriod,
+		// The worker callback runs in a separate goroutine. Releasing the Lease
+		// here would let a new leader start before that worker has stopped.
+		ReleaseOnCancel: false,
+		Callbacks:       a.leaderCallbacks(id, stopElection, workerDone),
 	})
 	if err != nil {
 		return fmt.Errorf("failed to create leader elector: %w", err)
 	}
 
-	le.Run(ctx)
+	le.Run(electionCtx)
+	if trackedLock.acquired.Load() {
+		// Run cancels the leader context when the Lease is lost, but does not
+		// wait for OnStartedLeading to return.
+		workerErr := <-workerDone
+		logger.Info("Leader reconciliation worker stopped")
+		if workerErr != nil && ctx.Err() == nil && !errors.Is(workerErr, context.Canceled) {
+			a.setReady(false)
+			// A pod with broken access to the synthetics API must not restart
+			// and reacquire the Lease before a healthy standby can take over.
+			timer := time.NewTimer(leaseDuration + retryPeriod)
+			defer timer.Stop()
+			select {
+			case <-timer.C:
+			case <-ctx.Done():
+			}
+			return fmt.Errorf("leader worker stopped: %w", workerErr)
+		}
+	}
 	return nil
 }
 
-func (a *Agent) leaderCallbacks(id string) leaderelection.LeaderCallbacks {
+func (a *Agent) leaderCallbacks(id string, stopElection context.CancelFunc, workerDone chan<- error) leaderelection.LeaderCallbacks {
 	return leaderelection.LeaderCallbacks{
 		OnStartedLeading: func(leaderCtx context.Context) {
 			logger.Info("Acquired leader lease, starting reconciliation")
 			metrics.SetLeader(true)
 			a.setReady(true)
-			if err := a.worker.Start(leaderCtx, &a.taskWG, a.shutdownChan); err != nil && leaderCtx.Err() == nil {
+			err := a.worker.Start(leaderCtx, &a.taskWG, a.shutdownChan)
+			if err != nil && leaderCtx.Err() == nil {
 				logger.Errorf("Worker error: %v", err)
+				if stopElection != nil {
+					stopElection()
+				}
+			}
+			if workerDone != nil {
+				workerDone <- err
 			}
 		},
 		OnStoppedLeading: func() {
-			logger.Info("Lost leader lease, stopped reconciliation")
+			logger.Info("Lost leader lease, stopping reconciliation")
 			metrics.SetLeader(false)
 			// Do NOT flip readiness to false here: the process itself is
 			// still healthy and is simply returning to standby. Readiness
