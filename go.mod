@@ -1,6 +1,6 @@
 module github.com/rhobs/rhobs-synthetics-agent
 
-go 1.26.0
+go 1.27
 
 require (
 	github.com/fsnotify/fsnotify v1.10.1
@@ -74,7 +74,7 @@ require (
 	k8s.io/utils v0.0.0-20260707023825-cf1189d6abe3 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
-	sigs.k8s.io/structured-merge-diff/v6 v6.4.2 // indirect
+	sigs.k8s.io/structured-merge-diff/v6 v6.4.1 // indirect
 )
 
 // replace github.com/rhobs/rhobs-synthetics-api => ../rhobs-synthetics-api
