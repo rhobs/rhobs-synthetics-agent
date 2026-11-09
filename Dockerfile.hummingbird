@@ -1,0 +1,34 @@
+# Use the official Golang image to create a build artifact.
+# This is a multi-stage build, so we'll use a temporary image for the build process.
+# When bumping the tag, also update the value in the .ci-operator.yaml file.
+FROM quay.io/redhat-services-prod/openshift/boilerplate:image-v8.4.1 AS builder
+
+# Set the Current Working Directory inside the container
+WORKDIR /app
+
+# Copy go mod and sum files
+COPY go.mod go.sum ./
+
+# Download all dependencies. Dependencies will be cached if the go.mod and go.sum files are not changed
+RUN go mod download
+
+# Copy the source code into the container
+COPY . .
+
+# Build the Go app
+RUN make build
+
+# Prepare application-owned writable directories without requiring a runtime shell.
+RUN mkdir -p /runtime-home/data && chown -R 65532:0 /runtime-home && chmod -R g=u /runtime-home
+
+# Minimal FIPS-capable runtime. Keep the tag and digest visible to Renovate.
+FROM registry.access.redhat.com/hi/core-runtime:2.43-openssl-fips@sha256:dda4ca9f205064c1391168713fae4dfe32057f3a1e619540db34f9d167b71c74
+WORKDIR /home/rhobs
+ENV HOME=/home/rhobs
+COPY --from=builder --chown=65532:0 /runtime-home/ /home/rhobs/
+COPY --from=builder --chown=65532:0 /app/rhobs-synthetics-agent ./
+COPY --from=builder /app/LICENSE /licenses/LICENSE
+EXPOSE 8080
+USER 65532:0
+# Equivalent to entrypoint.sh, whose APP_ENV=dev branch has no effect.
+ENTRYPOINT ["./rhobs-synthetics-agent", "start"]
