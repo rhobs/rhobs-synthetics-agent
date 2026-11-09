@@ -22,8 +22,42 @@ keep this experimental build separate from production snapshots. Konflux
 application/component registration, cluster tests and scanning require the
 corresponding external environment; this change does not deploy the image.
 
-Local verification uses `--platform linux/amd64` because the workstation VM is
-arm64 and the service build targets Linux amd64. JSON and YAML parse, the copied
-PipelineRun differs only in the requested fields, and `git diff --check` passes.
-Container build/run verification is pending after the shared Podman build service
-lost its connections during concurrent compilation (`unexpected EOF`).
+## Local verification
+
+Both Dockerfiles built successfully using Linux amd64 emulation on the arm64
+workstation VM. The images were:
+
+- hardened: `608367b5fa6207abb831a7a025697c5d703e9f2823cfbdb58da0b5693e0ed6a8`
+- production: `b0378d96b6bb0d644fc75266ef64f70531faff62351eb375a6086837c460568b`
+
+```sh
+podman build --platform linux/amd64 --cpu-quota=300000 \
+  --volume /var/tmp/hummingbird-go-cache-v841:/tmp/go-build:z --pull=never \
+  -f Dockerfile.hummingbird -t rhobs-synthetics-agent-hummingbird-test .
+podman build --platform linux/amd64 --cpu-quota=300000 \
+  --volume /var/tmp/hummingbird-go-cache-v841:/tmp/go-build:z --pull=never \
+  -f Dockerfile -t rhobs-synthetics-agent-production-test .
+```
+
+The shared Go cache and CPU quota are local verification aids; they do not modify
+the Dockerfiles or CI requirements. Initial concurrent attempts disconnected with
+`unexpected EOF`; the successful completed builds above supersede those attempts.
+
+The default entrypoint with `--help` succeeds in both images. The hardened image
+also passes with `--user 1001230000:0`, and its binary can be invoked directly with
+`--entrypoint /home/rhobs/rhobs-synthetics-agent --help` (image name precedes
+`--help`). The executable is dynamically linked with interpreter
+`/lib64/ld-linux-x86-64.so.2`; successful execution verifies its startup libraries
+are supplied by the Hummingbird base without copying UBI libraries.
+
+A detached hardened container running as `1001230000:0` with
+`--leader-elect=false` and no API URLs started successfully in standalone mode.
+The HTTP `/livez` and `/readyz` endpoints returned `OK` and `Ready`. The smoke
+container was stopped and removed afterward.
+
+JSON and YAML parse, only the specified PipelineRun fields differ, and
+`git diff --check` passes. The production Dockerfile is byte-for-byte unchanged.
+No live Kubernetes reconciliation, external CI, CVE scan, Enterprise Contract or
+release gate was exercised locally. The base is FIPS-capable; the application
+retains its existing `make build` behavior and this check does not establish
+application-level FIPS certification.
