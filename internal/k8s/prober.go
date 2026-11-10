@@ -404,7 +404,7 @@ func (m *BlackBoxProberManager) PrometheusNeedsRecreation(ctx context.Context) (
 
 	// Check if remote write URL matches
 	if len(currentPrometheus.Spec.RemoteWrite) > 0 {
-		if currentPrometheus.Spec.RemoteWrite[0].URL != m.remoteWriteURL {
+		if currentPrometheus.Spec.RemoteWrite[0].URL != promv1.URL(m.remoteWriteURL) {
 			logger.Infof("Prometheus remote write URL mismatch: current=%q, expected=%q",
 				currentPrometheus.Spec.RemoteWrite[0].URL, m.remoteWriteURL)
 			return true, nil
@@ -537,7 +537,7 @@ const (
 // When OIDC credentials are available, it configures OAuth2 authentication.
 func (m *BlackBoxProberManager) buildRemoteWriteSpecs() []promv1.RemoteWriteSpec {
 	spec := promv1.RemoteWriteSpec{
-		URL: m.remoteWriteURL,
+		URL: promv1.URL(m.remoteWriteURL),
 		Headers: map[string]string{
 			"THANOS-TENANT": m.remoteWriteTenant,
 		},
@@ -559,7 +559,7 @@ func (m *BlackBoxProberManager) buildRemoteWriteSpecs() []promv1.RemoteWriteSpec
 				LocalObjectReference: corev1.LocalObjectReference{Name: oidcSecretName},
 				Key:                  "client-secret",
 			},
-			TokenURL: tokenURL,
+			TokenURL: promv1.URL(tokenURL),
 			Scopes:   []string{"profile"},
 		}
 	}
