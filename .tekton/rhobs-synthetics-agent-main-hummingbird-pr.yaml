@@ -11,7 +11,7 @@ metadata:
     pipelinesascode.tekton.dev/on-cel-expression: event == "pull_request" && target_branch == "main"
   creationTimestamp:
   labels:
-    appstudio.openshift.io/application: rhobs-synthetics-agent-main-hummingbird
+    appstudio.openshift.io/application: rhobs-synthetics-agent-main
     appstudio.openshift.io/component: rhobs-synthetics-agent-main-hummingbird
     pipelines.appstudio.openshift.io/type: build
   name: rhobs-synthetics-agent-main-hummingbird-on-pull-request
